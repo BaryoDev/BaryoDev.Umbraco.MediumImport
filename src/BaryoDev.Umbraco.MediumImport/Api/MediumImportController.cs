@@ -87,7 +87,7 @@ public sealed class MediumImportController(
             // If something read the form before this action, the body is gone. Use the parsed form instead.
             if (HttpContext.Features.Get<IFormFeature>()?.Form is { } form)
             {
-                IFormFile? posted = form.Files["file"] ?? form.Files.FirstOrDefault();
+                IFormFile? posted = form.Files["file"];
                 if (posted is null)
                 {
                     return BadRequest(new ApiError("Send the zip as multipart form data in a field named file."));
