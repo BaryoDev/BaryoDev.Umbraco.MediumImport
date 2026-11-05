@@ -1,0 +1,25 @@
+{
+  "$schema": "../../umbraco-package-schema.json",
+  "name": "BaryoDev.Umbraco.MediumImport",
+  "version": "0.1.0",
+  "allowTelemetry": false,
+  "extensions": [
+    {
+      "type": "dashboard",
+      "alias": "BaryoDev.MediumImport.Dashboard",
+      "name": "Medium import",
+      "element": "/App_Plugins/BaryoDev.MediumImport/medium-import-dashboard.js",
+      "weight": -10,
+      "meta": {
+        "label": "Medium import",
+        "pathname": "medium-import"
+      },
+      "conditions": [
+        {
+          "alias": "Umb.Condition.SectionAlias",
+          "match": "Umb.Section.Settings"
+        }
+      ]
+    }
+  ]
+}
