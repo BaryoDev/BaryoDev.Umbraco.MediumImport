@@ -1,9 +1,9 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
+using HtmlAgilityPack;
 using BaryoDev.Umbraco.MediumImport.Engine;
 using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.PropertyEditors;
-using Umbraco.Cms.Core.Security;
 using Umbraco.Cms.Core.Serialization;
 using Umbraco.Cms.Core.Services;
 using Umbraco.Extensions;
@@ -19,17 +19,14 @@ public sealed class UmbracoPostWriter : IPostWriter
     private readonly PropertyEditorCollection _editors;
     private readonly IDataTypeService _dataTypes;
     private readonly IJsonSerializer _json;
-    private readonly IHtmlSanitizer _sanitizer;
 
     public UmbracoPostWriter(
-        IContentService content, PropertyEditorCollection editors, IDataTypeService dataTypes, IJsonSerializer json,
-        IHtmlSanitizer sanitizer)
+        IContentService content, PropertyEditorCollection editors, IDataTypeService dataTypes, IJsonSerializer json)
     {
         _content = content;
         _editors = editors;
         _dataTypes = dataTypes;
         _json = json;
-        _sanitizer = sanitizer;
     }
 
     public Guid? FindByOriginalUrl(ImportSettings settings, string url)
@@ -102,9 +99,9 @@ public sealed class UmbracoPostWriter : IPostWriter
     private static bool IsRichText(IContent node, string alias) =>
         node.Properties[alias]?.PropertyType.PropertyEditorAlias == "Umbraco.RichText";
 
-    // The importer stores raw markup. A backoffice save (RTE FromEditor) stores a {"markup","blocks"}
-    // envelope and runs the markup through the HTML sanitizer. Hash the sanitized markup either way.
-    private string NormaliseRichText(string raw)
+    // The importer stores raw markup. A backoffice save stores a {"markup","blocks"} envelope and blanks
+    // the src of any img that has a data-udi (Umbraco rebuilds it on read). Hash the markup with that src ignored.
+    private static string NormaliseRichText(string raw)
     {
         string markup = raw;
         if (raw.TrimStart().StartsWith('{'))
@@ -121,7 +118,22 @@ public sealed class UmbracoPostWriter : IPostWriter
             }
         }
 
-        return _sanitizer.Sanitize(markup);
+        if (!markup.Contains("data-udi", StringComparison.Ordinal))
+        {
+            return markup;
+        }
+
+        var doc = new HtmlDocument();
+        doc.LoadHtml(markup);
+        foreach (HtmlNode img in doc.DocumentNode.SelectNodes("//img[@data-udi]") ?? Enumerable.Empty<HtmlNode>())
+        {
+            if (!string.IsNullOrEmpty(img.GetAttributeValue("data-udi", "")))
+            {
+                img.Attributes.Remove("src");
+            }
+        }
+
+        return doc.DocumentNode.OuterHtml;
     }
 
     public Guid Write(ImportSettings settings, PostValues values, Guid? existing, int userId)
