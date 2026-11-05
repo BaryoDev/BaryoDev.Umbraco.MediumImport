@@ -37,30 +37,27 @@ public abstract class ImportFixtureBase : UmbracoIntegrationTest
     [SetUp]
     public void SeedTypes()
     {
-        using (var scope = ScopeProvider.CreateScope(autoComplete: true))
+        var textBox = DataType("Umbraco.TextBox");
+        var textArea = DataType("Umbraco.TextArea");
+        var richText = DataType("Umbraco.RichText");
+        var date = DataType("Umbraco.DateTime");
+        var picker = DataType("Umbraco.MediaPicker3");
+        var tags = DataType("Umbraco.Tags");
+
+        CreateType("post", false, [], new (string, IDataType)[]
         {
-            var textBox = DataType("Umbraco.TextBox");
-            var textArea = DataType("Umbraco.TextArea");
-            var richText = DataType("Umbraco.RichText");
-            var date = DataType("Umbraco.DateTime");
-            var picker = DataType("Umbraco.MediaPicker3");
-            var tags = DataType("Umbraco.Tags");
+            ("title", textBox), ("body", richText), ("publishDate", date), ("summary", textArea),
+            ("cover", picker), ("tags", tags), ("canonical", textBox), ("originalUrl", textBox),
+            ("headline", textBox), ("umbracoUrlName", textBox),
+        });
+        CreateType("bare", false, [], new (string, IDataType)[] { ("title", textBox), ("body", richText) });
+        CreateType("blog", true, ["post", "bare"], new (string, IDataType)[] { ("title", textBox) });
 
-            CreateType("post", false, [], new (string, IDataType)[]
-            {
-                ("title", textBox), ("body", richText), ("publishDate", date), ("summary", textArea),
-                ("cover", picker), ("tags", tags), ("canonical", textBox), ("originalUrl", textBox),
-                ("headline", textBox), ("umbracoUrlName", textBox),
-            });
-            CreateType("bare", false, [], new (string, IDataType)[] { ("title", textBox), ("body", richText) });
-            CreateType("blog", true, ["post", "bare"], new (string, IDataType)[] { ("title", textBox) });
-
-            IContent blog = Content.Create("Blog", Constants.System.Root, "blog");
-            Content.Save(blog);
-            var published = Content.Publish(blog, ["*"]);
-            Assert.That(published.Success, Is.True, "publish blog: " + published.Result);
-            BlogKey = blog.Key;
-        }
+        IContent blog = Content.Create("Blog", Constants.System.Root, "blog");
+        Content.Save(blog);
+        var published = Content.Publish(blog, ["*"]);
+        Assert.That(published.Success, Is.True, "publish blog: " + published.Result);
+        BlogKey = blog.Key;
     }
 
     protected ImportSettings Settings(string docType = "post", bool publish = false, FieldMapping? mapping = null) =>

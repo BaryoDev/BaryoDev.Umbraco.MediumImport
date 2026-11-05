@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using NUnit.Framework;
 using Umbraco.Cms.Core.DependencyInjection;
 using Umbraco.Cms.Core.Migrations;
+using Umbraco.Cms.Core.Packaging;
 using Umbraco.Cms.Infrastructure.Install;
 using Umbraco.Cms.Infrastructure.Scoping;
 using Umbraco.Cms.Tests.Common.Testing;
@@ -45,6 +46,13 @@ public class MigrationTests : UmbracoIntegrationTest
         var syntax = scope.Database.SqlContext.SqlSyntax;
         return syntax.DoesTableExist(scope.Database, StoryKeyRow.TableName)
             && syntax.DoesTableExist(scope.Database, MediaKeyRow.TableName);
+    }
+
+    [Test]
+    public void Plan_is_discovered_at_boot()
+    {
+        var plans = Services.GetRequiredService<PackageMigrationPlanCollection>();
+        Assert.That(plans.Select(p => p.PackageName), Does.Contain("BaryoDev.Umbraco.MediumImport"));
     }
 
     [Test]
