@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
   <PropertyGroup>
     <PackageId>BaryoDev.Umbraco.MediumImport</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Authors>BaryoDev</Authors>
     <Description>Import your Medium export into Umbraco 17: code blocks kept exact, gists inlined, images copied to the media library, reruns update instead of duplicate.</Description>
     <PackageTags>umbraco umbraco-marketplace medium import blog migration</PackageTags>
