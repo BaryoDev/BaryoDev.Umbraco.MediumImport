@@ -22,5 +22,6 @@
   <ItemGroup>
     <None Include="../../README.md" Pack="true" PackagePath="/" />
     <InternalsVisibleTo Include="BaryoDev.Umbraco.MediumImport.Tests" />
+    <InternalsVisibleTo Include="BaryoDev.Umbraco.MediumImport.IntegrationTests" />
   </ItemGroup>
 </Project>

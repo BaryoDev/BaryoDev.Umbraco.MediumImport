@@ -14,7 +14,7 @@ public sealed class StoryKeyRepository(IScopeProvider scopeProvider) : IStoryKey
     public void Upsert(StoryKeyRow row) => UpsertCore(row, skipRead: false);
 
     /// <summary>Test seam: skipRead forces the insert path so the duplicate-key retry runs.</summary>
-    public void UpsertCore(StoryKeyRow row, bool skipRead)
+    internal void UpsertCore(StoryKeyRow row, bool skipRead)
     {
         ArgumentNullException.ThrowIfNull(row);
         using var scope = scopeProvider.CreateScope();

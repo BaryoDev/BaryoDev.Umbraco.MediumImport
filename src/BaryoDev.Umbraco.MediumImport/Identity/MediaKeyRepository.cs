@@ -18,7 +18,7 @@ public sealed class MediaKeyRepository(IScopeProvider scopeProvider) : IMediaKey
     public void Upsert(Uri source, Guid mediaKey) => UpsertCore(source, mediaKey, skipRead: false);
 
     /// <summary>Test seam: skipRead forces the insert path so the duplicate-key retry runs.</summary>
-    public void UpsertCore(Uri source, Guid mediaKey, bool skipRead)
+    internal void UpsertCore(Uri source, Guid mediaKey, bool skipRead)
     {
         var row = new MediaKeyRow { SourceHash = HashOf(source), SourceUrl = source.AbsoluteUri, MediaKey = mediaKey };
         using var scope = scopeProvider.CreateScope();

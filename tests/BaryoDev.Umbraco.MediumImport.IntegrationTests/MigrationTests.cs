@@ -109,7 +109,9 @@ public class MigrationTests : UmbracoIntegrationTest
         }
 
         Assert.That(
-            () => Stories.Upsert(new StoryKeyRow { PostId = "x", ContentKey = Guid.NewGuid(), ValuesHash = "h", ImportedUtc = DateTime.UtcNow }),
+            () => ((StoryKeyRepository)Stories).UpsertCore(
+                new StoryKeyRow { PostId = "x", ContentKey = Guid.NewGuid(), ValuesHash = "h", ImportedUtc = DateTime.UtcNow },
+                skipRead: true),
             Throws.Exception);
     }
 }
