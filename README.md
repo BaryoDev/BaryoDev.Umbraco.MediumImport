@@ -14,6 +14,7 @@ Each claim below names the test that backs it. Test classes are under `tests/`.
 - Each Medium image is copied into the media library and the body points at the media item. An image that cannot be fetched is dropped from the body and listed as a failure on that post. (`CodeBlockTests.Medium_image_rewritten_with_udi`, `EngineTests.Image_failure_drops_img_and_lists_failure`)
 - Images on other hosts are not fetched. They stay in the body and are listed as a warning. (`EngineTests.Other_host_image_listed_as_warning`)
 - A rerun updates the posts it imported before and does not create duplicates. (`EngineTests.Import_creates_then_rerun_updates_without_duplicates`)
+- A post's node and its import record are saved together. If the publish fails, nothing is left behind and a rerun creates exactly one node. (`AtomicStoryTests.Failed_publish_leaves_no_node_and_no_key_row_and_a_rerun_creates_one_node`)
 - A post you edited after the import is skipped on rerun, with the reason "edited since import". (`EngineTests.Edited_post_skipped_with_reason_edited_since_import`)
 - A post whose node was deleted is created again. (`EngineTests.Deleted_node_created_again`)
 - A post that already exists with the same Medium URL in the mapped original URL field is adopted instead of duplicated. Without that field mapped there is no adoption. (`EngineTests.Adoption_by_original_url_writes_key_row`, `No_adoption_without_original_url_mapping`)

@@ -5,6 +5,7 @@ using BaryoDev.Umbraco.MediumImport.Net;
 using BaryoDev.Umbraco.MediumImport.Parsing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Umbraco.Cms.Core.Scoping;
 
 namespace BaryoDev.Umbraco.MediumImport.Engine;
 
@@ -21,6 +22,7 @@ public sealed class MediumImportEngine
     private readonly IReadOnlyList<IMediumImportCallback> _callbacks;
     private readonly MediumImportOptions _options;
     private readonly ILogger<MediumImportEngine>? _logger;
+    private readonly ICoreScopeProvider? _scopes;
 
     public MediumImportEngine(
         IStoryKeyRepository stories,
@@ -33,7 +35,8 @@ public sealed class MediumImportEngine
         IEnumerable<IMediumSlugPolicy> slugs,
         IEnumerable<IMediumImportCallback> callbacks,
         IOptions<MediumImportOptions> options,
-        ILogger<MediumImportEngine>? logger = null)
+        ILogger<MediumImportEngine>? logger = null,
+        ICoreScopeProvider? scopes = null)
     {
         _stories = stories;
         _media = media;
@@ -46,6 +49,7 @@ public sealed class MediumImportEngine
         _callbacks = callbacks.ToList();
         _options = options.Value;
         _logger = logger;
+        _scopes = scopes;
     }
 
     public async Task<PreviewResult> PreviewAsync(Stream zip, ImportSettings s, CancellationToken ct)
@@ -367,9 +371,18 @@ public sealed class MediumImportEngine
         }
 
         var post = new PostValues(title, _slugs?.SlugFor(story), values, m.Cover is null ? null : cover?.MediaKey);
-        Guid key = _writer.Write(s, post, existing, userId);
-        IReadOnlyDictionary<string, string?> back = _writer.ReadMapped(key, s) ?? new Dictionary<string, string?>();
-        SaveRow(story.PostId, key, back);
+
+        // The node and its key row succeed or fail together. If the publish throws, or the process dies
+        // before Complete, the scope rolls the node back, so a rerun never sees a node without a row.
+        // Nothing in this block awaits, so the ambient scope stays on this thread.
+        Guid key;
+        using (ICoreScope? scope = _scopes?.CreateCoreScope())
+        {
+            key = _writer.Write(s, post, existing, userId);
+            IReadOnlyDictionary<string, string?> back = _writer.ReadMapped(key, s) ?? new Dictionary<string, string?>();
+            SaveRow(story.PostId, key, back);
+            scope?.Complete();
+        }
 
         return new StoryResult(story.PostId, title, existing is null ? Outcome.Imported : Outcome.Updated, null, key, warnings, failures);
     }
