@@ -11,6 +11,7 @@ using BaryoDev.Umbraco.MediumImport.Uploads;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Umbraco.Cms.Core;
 using Umbraco.Cms.Core.Services;
 using Umbraco.Cms.Tests.Common.Testing;
 using Umbraco.Cms.Tests.Integration.ManagementApi;
@@ -79,7 +80,7 @@ public class ApiTests : ApiTestBase
     [Test]
     public async Task Non_settings_user_gets_403()
     {
-        await AuthenticateWithSectionsAsync("contentonly", "Umb.Section.Content");
+        await AuthenticateWithSectionsAsync("contentonly", Constants.Applications.Content);
         HttpResponseMessage response = await Client.GetAsync(Base + "settings");
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
     }
@@ -87,7 +88,7 @@ public class ApiTests : ApiTestBase
     [Test]
     public async Task Settings_user_gets_204_when_nothing_is_saved()
     {
-        await AuthenticateWithSectionsAsync("settingsuser", "Umb.Section.Settings");
+        await AuthenticateWithSectionsAsync("settingsuser", Constants.Applications.Settings);
         HttpResponseMessage response = await Client.GetAsync(Base + "settings");
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
     }
@@ -95,7 +96,7 @@ public class ApiTests : ApiTestBase
     [Test]
     public async Task Upload_over_cap_gets_413()
     {
-        await AuthenticateWithSectionsAsync("uploader", "Umb.Section.Settings");
+        await AuthenticateWithSectionsAsync("uploader", Constants.Applications.Settings);
         using var form = new MultipartFormDataContent { { new ByteArrayContent(new byte[300_000]), "file", "export.zip" } };
         HttpResponseMessage response = await Client.PostAsync(Base + "upload", form);
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.RequestEntityTooLarge));
@@ -104,7 +105,7 @@ public class ApiTests : ApiTestBase
     [Test]
     public async Task Preview_returns_stories()
     {
-        await AuthenticateWithSectionsAsync("previewer", "Umb.Section.Settings");
+        await AuthenticateWithSectionsAsync("previewer", Constants.Applications.Settings);
         Guid uploadId = await UploadAsync(ExportZip());
         HttpResponseMessage response = await Client.PostAsJsonAsync(Base + "preview", new { uploadId, settings = Settings() });
         string body = await response.Content.ReadAsStringAsync();
@@ -118,7 +119,7 @@ public class ApiTests : ApiTestBase
     [Test]
     public async Task Import_then_poll_until_completed()
     {
-        await AuthenticateWithSectionsAsync("importer", "Umb.Section.Settings");
+        await AuthenticateWithSectionsAsync("importer", Constants.Applications.Settings);
         Guid uploadId = await UploadAsync(ExportZip());
         HttpResponseMessage started = await StartImportAsync(uploadId);
         string startedBody = await started.Content.ReadAsStringAsync();
@@ -147,7 +148,7 @@ public class ApiTests : ApiTestBase
     [Test]
     public async Task Unknown_job_returns_404_stopped()
     {
-        await AuthenticateWithSectionsAsync("poller", "Umb.Section.Settings");
+        await AuthenticateWithSectionsAsync("poller", Constants.Applications.Settings);
         HttpResponseMessage response = await Client.GetAsync(Base + "jobs/" + Guid.NewGuid());
         string body = await response.Content.ReadAsStringAsync();
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
@@ -170,7 +171,7 @@ public class QueuedJobApiTests : ApiTestBase
     [Test]
     public async Task Second_import_gets_409()
     {
-        await AuthenticateWithSectionsAsync("twice", "Umb.Section.Settings");
+        await AuthenticateWithSectionsAsync("twice", Constants.Applications.Settings);
         Guid uploadId = await UploadAsync(ExportZip());
         Assert.That((await StartImportAsync(uploadId)).StatusCode, Is.EqualTo(HttpStatusCode.OK));
         Assert.That((await StartImportAsync(uploadId)).StatusCode, Is.EqualTo(HttpStatusCode.Conflict));
@@ -179,7 +180,7 @@ public class QueuedJobApiTests : ApiTestBase
     [Test]
     public async Task Failed_job_response_hides_the_raw_error()
     {
-        await AuthenticateWithSectionsAsync("failer", "Umb.Section.Settings");
+        await AuthenticateWithSectionsAsync("failer", Constants.Applications.Settings);
         Guid uploadId = await UploadAsync(ExportZip());
         string started = await (await StartImportAsync(uploadId)).Content.ReadAsStringAsync();
         Guid jobId = JsonDocument.Parse(started).RootElement.GetProperty("jobId").GetGuid();
@@ -198,7 +199,7 @@ public class QueuedJobApiTests : ApiTestBase
     [Test]
     public async Task Cancelling_a_queued_job_deletes_its_upload()
     {
-        await AuthenticateWithSectionsAsync("canceller", "Umb.Section.Settings");
+        await AuthenticateWithSectionsAsync("canceller", Constants.Applications.Settings);
         Guid uploadId = await UploadAsync(ExportZip());
         string started = await (await StartImportAsync(uploadId)).Content.ReadAsStringAsync();
         Guid jobId = JsonDocument.Parse(started).RootElement.GetProperty("jobId").GetGuid();
