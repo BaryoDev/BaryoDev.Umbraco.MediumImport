@@ -139,4 +139,81 @@ public class CodeBlockTests
             "<p><code>x</code></p>",
             PostHtmlSanitizer.Sanitize("<p><code class=\"language-&lt;x&gt;\">x</code></p>", Context()));
     }
+
+    private const string GistScript = "<script src=\"https://gist.github.com/someone/0123456789abcdef.js\"></script>";
+
+    [Fact]
+    public void Resolved_image_with_javascript_url_is_dropped()
+    {
+        var context = new SanitizeContext(
+            new Dictionary<Uri, ResolvedImage>
+            {
+                [new Uri("https://cdn-images-1.medium.com/max/800/1*one.png")] = new("javascript:alert(1)", MediaKey),
+            },
+            new Dictionary<string, Gist>());
+        Assert.Equal(
+            "<p>a</p><p>b</p>",
+            PostHtmlSanitizer.Sanitize(
+                "<p>a</p><img src=\"https://cdn-images-1.medium.com/max/800/1*one.png\" alt=\"one\"><p>b</p>", context));
+    }
+
+    [Fact]
+    public void Gist_script_inside_pre_leaves_code_text_exact()
+    {
+        Assert.Equal(
+            "<pre><code>ab</code></pre>",
+            PostHtmlSanitizer.Sanitize("<pre>a" + GistScript + "b</pre>", Context()));
+    }
+
+    [Fact]
+    public void Unresolved_image_leaves_no_empty_wrappers()
+    {
+        Assert.Equal(
+            "<p>t</p>",
+            PostHtmlSanitizer.Sanitize(
+                "<p><a href=\"https://example.com\"><img src=\"https://miro.medium.com/v2/1*two.png\" alt=\"two\"></a></p><p>t</p>",
+                Context()));
+    }
+
+    [Fact]
+    public void Gist_script_alone_in_paragraph_makes_no_nested_p()
+    {
+        string result = PostHtmlSanitizer.Sanitize("<p>" + GistScript + "</p>", Context());
+        Assert.DoesNotContain("<p><p>", result);
+        Assert.Equal(
+            "<pre><code class=\"language-go\">a &lt; b &amp;&amp; c</code></pre>"
+            + "<pre><code class=\"language-plain-text\">x</code></pre>"
+            + "<p><a href=\"https://gist.github.com/someone/0123456789abcdef\">Source: gist</a></p>",
+            result);
+    }
+
+    [Fact]
+    public void Pre_without_context_matches_baryoweb()
+    {
+        Assert.Equal("<pre>x</pre>", PostHtmlSanitizer.Sanitize("<pre data-code-block-lang=\"go\">x</pre>"));
+    }
+
+    [Fact]
+    public void Figure_with_caption_and_unresolved_image_is_dropped()
+    {
+        Assert.Equal(
+            "",
+            PostHtmlSanitizer.Sanitize(
+                "<figure><img src=\"https://cdn-images-1.medium.com/max/800/1*two.png\" alt=\"two\"><figcaption>Gone</figcaption></figure>",
+                Context()));
+    }
+
+    [Fact]
+    public void Gist_link_with_non_http_html_url_writes_no_source_link()
+    {
+        var context = new SanitizeContext(
+            new Dictionary<Uri, ResolvedImage>(),
+            new Dictionary<string, Gist>
+            {
+                ["0123456789abcdef"] = new("0123456789abcdef", new Uri("ftp://example.com/g"), new[] { new GistFile("a.go", null, "x") }),
+            });
+        Assert.Equal(
+            "<pre><code class=\"language-go\">x</code></pre>",
+            PostHtmlSanitizer.Sanitize("<p>" + GistLink + "</p>", context));
+    }
 }

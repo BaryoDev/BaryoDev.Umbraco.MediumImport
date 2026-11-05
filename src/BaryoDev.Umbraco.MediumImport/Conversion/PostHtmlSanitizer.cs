@@ -37,17 +37,23 @@ public static class PostHtmlSanitizer
     {
         var doc = new HtmlDocument();
         doc.LoadHtml(html);
-        EmbedsToLinks(doc);
+        EmbedsToLinks(doc, context is not null);
         var sb = new StringBuilder();
         Walk(doc.DocumentNode, sb, context);
         return sb.ToString().Trim();
     }
 
     /// <summary>A gist script or an https iframe becomes a plain link. Everything else that runs is dropped later.</summary>
-    private static void EmbedsToLinks(HtmlDocument doc)
+    private static void EmbedsToLinks(HtmlDocument doc, bool withContext)
     {
         foreach (HtmlNode node in doc.DocumentNode.Descendants().Where(n => n.Name is "script" or "iframe").ToList())
         {
+            if (withContext && node.Ancestors("pre").Any())
+            {
+                node.Remove();
+                continue;
+            }
+
             string src = HtmlEntity.DeEntitize(node.GetAttributeValue("src", "")).Trim();
             if (!Uri.TryCreate(src, UriKind.Absolute, out Uri? uri) || uri.Scheme != Uri.UriSchemeHttps || node.ParentNode is null)
             {
@@ -64,8 +70,9 @@ public static class PostHtmlSanitizer
                 ? new UriBuilder(uri) { Path = uri.AbsolutePath[..^3], Query = "" }.Uri.AbsoluteUri
                 : uri.AbsoluteUri;
             string label = gist ? "View the code on GitHub" : "Open " + uri.Host;
-            HtmlNode link = HtmlNode.CreateNode(
-                "<p><a href=\"" + WebUtility.HtmlEncode(href) + "\">" + WebUtility.HtmlEncode(label) + "</a></p>");
+            string anchor = "<a href=\"" + WebUtility.HtmlEncode(href) + "\">" + WebUtility.HtmlEncode(label) + "</a>";
+            bool inParagraph = withContext && node.ParentNode.Name.Equals("p", StringComparison.OrdinalIgnoreCase);
+            HtmlNode link = HtmlNode.CreateNode(inParagraph ? anchor : "<p>" + anchor + "</p>");
             node.ParentNode.ReplaceChild(link, node);
         }
     }
@@ -115,7 +122,7 @@ public static class PostHtmlSanitizer
         {
             if (name == "pre")
             {
-                CodeBlock(CodeLanguage.Normalize(node.GetAttributeValue("data-code-block-lang", "")), CodeText(node), sb);
+                CodeBlock(CodeLanguage.Normalize(HtmlEntity.DeEntitize(node.GetAttributeValue("data-code-block-lang", ""))), CodeText(node), sb);
                 return;
             }
 
@@ -125,6 +132,17 @@ public static class PostHtmlSanitizer
             }
 
             if (name == "p" && Paragraph(node, sb, ctx))
+            {
+                return;
+            }
+        }
+
+        StringBuilder? inner = null;
+        if (ctx is not null && name is "a" or "p")
+        {
+            inner = new StringBuilder();
+            Walk(node, inner, ctx);
+            if (inner.Length == 0)
             {
                 return;
             }
@@ -158,7 +176,15 @@ public static class PostHtmlSanitizer
             return;
         }
 
-        Walk(node, sb, ctx);
+        if (inner is not null)
+        {
+            sb.Append(inner);
+        }
+        else
+        {
+            Walk(node, sb, ctx);
+        }
+
         sb.Append("</").Append(name).Append('>');
     }
 
@@ -178,7 +204,13 @@ public static class PostHtmlSanitizer
                 return;
             }
 
-            sb.Append("<img src=\"").Append(WebUtility.HtmlEncode(image.Url))
+            string? url = Safe(image.Url, allowRelative: true);
+            if (url is null)
+            {
+                return;
+            }
+
+            sb.Append("<img src=\"").Append(WebUtility.HtmlEncode(url))
                 .Append("\" data-udi=\"umb://media/").Append(image.MediaKey.ToString("N"))
                 .Append("\" alt=\"").Append(alt).Append("\">");
             return;
