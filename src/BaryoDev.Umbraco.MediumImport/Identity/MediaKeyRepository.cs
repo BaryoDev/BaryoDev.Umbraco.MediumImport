@@ -15,11 +15,14 @@ public sealed class MediaKeyRepository(IScopeProvider scopeProvider) : IMediaKey
         return row?.MediaKey;
     }
 
-    public void Upsert(Uri source, Guid mediaKey)
+    public void Upsert(Uri source, Guid mediaKey) => UpsertCore(source, mediaKey, skipRead: false);
+
+    /// <summary>Test seam: skipRead forces the insert path so the duplicate-key retry runs.</summary>
+    public void UpsertCore(Uri source, Guid mediaKey, bool skipRead)
     {
         var row = new MediaKeyRow { SourceHash = HashOf(source), SourceUrl = source.AbsoluteUri, MediaKey = mediaKey };
         using var scope = scopeProvider.CreateScope();
-        var existing = scope.Database.SingleOrDefault<MediaKeyRow>("WHERE SourceHash = @0", row.SourceHash);
+        var existing = skipRead ? null : scope.Database.SingleOrDefault<MediaKeyRow>("WHERE SourceHash = @0", row.SourceHash);
         if (existing is null)
         {
             try
@@ -28,8 +31,12 @@ public sealed class MediaKeyRepository(IScopeProvider scopeProvider) : IMediaKey
             }
             catch (DbException)
             {
-                // another writer inserted the same key first
-                scope.Database.Update(row);
+                // The insert failed, most likely because another writer inserted the same key first,
+                // so update instead. If that updates nothing, the original error is rethrown.
+                if (scope.Database.Update(row) == 0)
+                {
+                    throw;
+                }
             }
         }
         else

@@ -11,11 +11,14 @@ public sealed class StoryKeyRepository(IScopeProvider scopeProvider) : IStoryKey
         return scope.Database.SingleOrDefault<StoryKeyRow>("WHERE PostId = @0", postId);
     }
 
-    public void Upsert(StoryKeyRow row)
+    public void Upsert(StoryKeyRow row) => UpsertCore(row, skipRead: false);
+
+    /// <summary>Test seam: skipRead forces the insert path so the duplicate-key retry runs.</summary>
+    public void UpsertCore(StoryKeyRow row, bool skipRead)
     {
         ArgumentNullException.ThrowIfNull(row);
         using var scope = scopeProvider.CreateScope();
-        var existing = scope.Database.SingleOrDefault<StoryKeyRow>("WHERE PostId = @0", row.PostId);
+        var existing = skipRead ? null : scope.Database.SingleOrDefault<StoryKeyRow>("WHERE PostId = @0", row.PostId);
         if (existing is null)
         {
             try
@@ -24,8 +27,12 @@ public sealed class StoryKeyRepository(IScopeProvider scopeProvider) : IStoryKey
             }
             catch (DbException)
             {
-                // another writer inserted the same key first
-                scope.Database.Update(row);
+                // The insert failed, most likely because another writer inserted the same key first,
+                // so update instead. If that updates nothing, the original error is rethrown.
+                if (scope.Database.Update(row) == 0)
+                {
+                    throw;
+                }
             }
         }
         else

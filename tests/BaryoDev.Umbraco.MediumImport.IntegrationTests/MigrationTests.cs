@@ -71,4 +71,45 @@ public class MigrationTests : UmbracoIntegrationTest
             Assert.That(scope.Database.ExecuteScalar<int>("SELECT COUNT(*) FROM " + MediaKeyRow.TableName), Is.EqualTo(1));
         }
     }
+
+    [Test]
+    public void Story_upsert_after_racing_insert_updates()
+    {
+        var repo = (StoryKeyRepository)Stories;
+        var key = Guid.NewGuid();
+        var at = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+        repo.Upsert(new StoryKeyRow { PostId = "race1", ContentKey = Guid.NewGuid(), ValuesHash = "first", ImportedUtc = at });
+
+        repo.UpsertCore(new StoryKeyRow { PostId = "race1", ContentKey = key, ValuesHash = "second", ImportedUtc = at }, skipRead: true);
+
+        var row = repo.Get("race1");
+        Assert.That(row!.ValuesHash, Is.EqualTo("second"));
+        Assert.That(row.ContentKey, Is.EqualTo(key));
+    }
+
+    [Test]
+    public void Media_upsert_after_racing_insert_updates()
+    {
+        var repo = (MediaKeyRepository)Media;
+        var url = new Uri("https://cdn-images-1.medium.com/max/800/race.png");
+        var second = Guid.NewGuid();
+        repo.Upsert(url, Guid.NewGuid());
+
+        repo.UpsertCore(url, second, skipRead: true);
+
+        Assert.That(repo.Get(url), Is.EqualTo(second));
+    }
+
+    [Test]
+    public void Upsert_with_missing_table_throws()
+    {
+        using (var scope = ScopeProvider.CreateScope(autoComplete: true))
+        {
+            scope.Database.Execute("DROP TABLE " + StoryKeyRow.TableName);
+        }
+
+        Assert.That(
+            () => Stories.Upsert(new StoryKeyRow { PostId = "x", ContentKey = Guid.NewGuid(), ValuesHash = "h", ImportedUtc = DateTime.UtcNow }),
+            Throws.Exception);
+    }
 }
