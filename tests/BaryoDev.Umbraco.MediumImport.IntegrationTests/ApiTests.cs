@@ -74,7 +74,7 @@ public abstract class ApiTestBase : ManagementApiTest<MediumImportController>
     protected static byte[] ExportZip()
     {
         const string html = "<html><body><article class=\"h-entry\"><h1 class=\"p-name\">Hello</h1>"
-            + "<section data-field=\"body\" class=\"e-content\"><p>Plain text.</p></section>"
+            + "<section data-field=\"body\" class=\"e-content\"><h3 class=\"graf graf--h3 graf--title\">Hello</h3><p>Plain text.</p></section>"
             + "<footer><time class=\"dt-published\" datetime=\"2024-01-02T10:00:00.000Z\"></time>"
             + "<a class=\"p-canonical\" href=\"https://medium.com/@me/hello-" + PostId + "\">x</a></footer></article></body></html>";
         var ms = new MemoryStream();
