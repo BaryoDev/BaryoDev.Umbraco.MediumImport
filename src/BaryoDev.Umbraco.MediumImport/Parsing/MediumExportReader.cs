@@ -11,10 +11,52 @@ public static class MediumExportReader
 {
     public static IReadOnlyList<MediumStory> Read(Stream zip, MediumExportLimits limits)
     {
+        Stream source = zip.CanSeek ? zip : Buffer(zip, limits.MaxTotalBytes);
+        try
+        {
+            return ReadArchive(source, limits);
+        }
+        finally
+        {
+            if (!ReferenceEquals(source, zip))
+            {
+                source.Dispose();
+            }
+        }
+    }
+
+    private static MemoryStream Buffer(Stream input, long cap)
+    {
+        var ms = new MemoryStream();
+        var buffer = new byte[81920];
+        int n;
+        try
+        {
+            while ((n = input.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                if (ms.Length + n > cap)
+                {
+                    throw new MediumExportException("The zip is too large.");
+                }
+
+                ms.Write(buffer, 0, n);
+            }
+        }
+        catch (IOException ex)
+        {
+            throw new MediumExportException("The upload could not be read: " + ex.Message);
+        }
+
+        ms.Position = 0;
+        return ms;
+    }
+
+    private static IReadOnlyList<MediumStory> ReadArchive(Stream source, MediumExportLimits limits)
+    {
         ZipArchive archive;
         try
         {
-            archive = new ZipArchive(zip, ZipArchiveMode.Read, leaveOpen: true);
+            archive = new ZipArchive(source, ZipArchiveMode.Read, leaveOpen: true);
         }
         catch (InvalidDataException ex)
         {
@@ -31,7 +73,16 @@ public static class MediumExportReader
             long total = 0;
             foreach (ZipArchiveEntry entry in archive.Entries)
             {
-                CheckName(entry.FullName);
+                if (IsHtml(entry.FullName))
+                {
+                    CheckName(entry.FullName);
+                }
+
+                if (!IsPost(entry.FullName))
+                {
+                    continue;
+                }
+
                 total += entry.Length;
                 if (total > limits.MaxTotalBytes)
                 {
@@ -42,13 +93,8 @@ public static class MediumExportReader
             var stories = new List<MediumStory>();
             long read = 0;
             int posts = 0;
-            foreach (ZipArchiveEntry entry in archive.Entries.OrderBy(e => e.FullName, StringComparer.Ordinal))
+            foreach (ZipArchiveEntry entry in archive.Entries.Where(e => IsPost(e.FullName)).OrderBy(e => e.FullName, StringComparer.Ordinal))
             {
-                if (!IsPost(entry.FullName))
-                {
-                    continue;
-                }
-
                 posts++;
                 byte[] bytes = ReadCounted(entry, limits.MaxEntryBytes);
                 read += bytes.Length;
@@ -75,37 +121,48 @@ public static class MediumExportReader
         }
     }
 
+    private static bool IsHtml(string name) => name.EndsWith(".html", StringComparison.OrdinalIgnoreCase);
+
+    private static string Short(string name) => name.Length <= 80 ? name : name[..80] + "...";
+
     private static bool IsPost(string name) =>
         name.StartsWith("posts/", StringComparison.Ordinal)
         && name.IndexOf('/', "posts/".Length) < 0
-        && name.EndsWith(".html", StringComparison.OrdinalIgnoreCase);
+        && IsHtml(name);
 
     private static void CheckName(string name)
     {
         if (name.Length == 0 || name.StartsWith('/') || name.Contains('\\') || name.Contains(':')
             || name.Contains('\0') || name.Split('/').Any(p => p == ".."))
         {
-            throw new MediumExportException($"Unsafe zip entry name: {name}");
+            throw new MediumExportException($"Unsafe zip entry name: {Short(name)}");
         }
     }
 
     /// <summary>Counts the bytes actually read, so a header Length that lies cannot get past the cap.</summary>
     private static byte[] ReadCounted(ZipArchiveEntry entry, long cap)
     {
-        using Stream s = entry.Open();
-        using var ms = new MemoryStream();
-        var buffer = new byte[81920];
-        int n;
-        while ((n = s.Read(buffer, 0, buffer.Length)) > 0)
+        try
         {
-            if (ms.Length + n > cap)
+            using Stream s = entry.Open();
+            using var ms = new MemoryStream();
+            var buffer = new byte[81920];
+            int n;
+            while ((n = s.Read(buffer, 0, buffer.Length)) > 0)
             {
-                throw new MediumExportException($"{entry.FullName} is over {cap} bytes.");
+                if (ms.Length + n > cap)
+                {
+                    throw new MediumExportException($"{Short(entry.FullName)} is over {cap} bytes.");
+                }
+
+                ms.Write(buffer, 0, n);
             }
 
-            ms.Write(buffer, 0, n);
+            return ms.ToArray();
         }
-
-        return ms.ToArray();
+        catch (Exception ex) when (ex is InvalidDataException or NotSupportedException or IOException)
+        {
+            throw new MediumExportException($"{Short(entry.FullName)} could not be read: {ex.Message}");
+        }
     }
 }

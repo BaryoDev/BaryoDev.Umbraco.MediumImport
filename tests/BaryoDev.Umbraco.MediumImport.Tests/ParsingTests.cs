@@ -158,4 +158,51 @@ public class ParsingTests
 
         Assert.Single(MediumExportReader.Read(zip, Roomy));
     }
+
+    [Fact]
+    public void Reader_wraps_corrupt_entry_as_export_exception()
+    {
+        MemoryStream zip = Zip(Post("2024-01-02"));
+        byte[] bytes = zip.ToArray();
+        int nameLen = BitConverter.ToUInt16(bytes, 26);
+        int extraLen = BitConverter.ToUInt16(bytes, 28);
+        bytes[30 + nameLen + extraLen] = 0xFF;
+
+        Assert.Throws<MediumExportException>(() => MediumExportReader.Read(new MemoryStream(bytes), Roomy));
+    }
+
+    [Fact]
+    public void Reader_total_cap_counts_bytes_read()
+    {
+        long larger = Math.Max(new FileInfo(FixturePath("2024-01-02")).Length, new FileInfo(FixturePath("2024-03-02")).Length);
+        using MemoryStream zip = Zip(Post("2024-01-02"), Post("2024-03-02"));
+
+        Assert.Throws<MediumExportException>(() =>
+            MediumExportReader.Read(zip, Roomy with { MaxEntryBytes = 1_000_000, MaxTotalBytes = larger + 10 }));
+    }
+
+    [Fact]
+    public void Reader_buffers_a_non_seekable_stream_and_caps_it()
+    {
+        MemoryStream zip = Zip(Post("2024-01-02"));
+        Assert.Single(MediumExportReader.Read(new ForwardOnly(zip.ToArray()), Roomy));
+        Assert.Throws<MediumExportException>(() =>
+            MediumExportReader.Read(new ForwardOnly(zip.ToArray()), Roomy with { MaxTotalBytes = 50 }));
+    }
+
+    private sealed class ForwardOnly(byte[] data) : MemoryStream(data)
+    {
+        public override bool CanSeek => false;
+    }
+
+    [Fact]
+    public void Parse_falls_back_to_title_tag_and_reads_rel_tag_lists()
+    {
+        MediumStory s = MediumPostParser.Parse("a-0a1b2c3d4e5f.html",
+            "<html><head><title>Fallback</title></head><body><h1 class=\"p-name\"> </h1>"
+            + "<section data-field=\"body\"><p>x</p></section><a rel=\"tag nofollow\" href=\"/t\">t1</a></body></html>");
+
+        Assert.Equal("Fallback", s.Title);
+        Assert.Equal(["t1"], s.Tags);
+    }
 }

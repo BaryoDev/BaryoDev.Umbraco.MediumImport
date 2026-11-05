@@ -20,7 +20,8 @@ public static class MediumPostParser
         Match idMatch = IdPattern.Match(fileName);
         string postId = idMatch.Success ? idMatch.Groups[1].Value.ToLowerInvariant() : "";
 
-        string title = Text(Find(doc, "h1", "p-name")) ?? Text(doc.DocumentNode.SelectSingleNode("//title")) ?? "";
+        string? h1 = Text(Find(doc, "h1", "p-name"));
+        string title = !string.IsNullOrWhiteSpace(h1) ? h1 : Text(doc.DocumentNode.SelectSingleNode("//title")) ?? "";
         string? summary = Text(doc.DocumentNode.Descendants("section").FirstOrDefault(n => HasClass(n, "p-summary")));
         if (string.IsNullOrEmpty(summary))
         {
@@ -43,8 +44,7 @@ public static class MediumPostParser
             mediumUrl = c;
         }
 
-        HtmlNode? body = doc.DocumentNode.SelectSingleNode("//section[@data-field='body']")
-            ?? doc.DocumentNode.SelectSingleNode("//article");
+        HtmlNode? body = doc.DocumentNode.SelectSingleNode("//section[@data-field='body']");
 
         bool hasTitleHeading = false;
         string? subtitle = null;
@@ -89,7 +89,7 @@ public static class MediumPostParser
         }
 
         var tags = doc.DocumentNode.Descendants("a")
-            .Where(a => HasClass(a, "p-tag") || a.GetAttributeValue("rel", "") == "tag")
+            .Where(a => HasClass(a, "p-tag") || a.GetAttributeValue("rel", "").Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains("tag", StringComparer.OrdinalIgnoreCase))
             .Select(Text).Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t!)
             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
