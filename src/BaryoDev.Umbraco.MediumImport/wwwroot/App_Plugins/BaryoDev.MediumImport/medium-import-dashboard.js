@@ -23,6 +23,10 @@ const STATUS = ["New", "AlreadyImported", "EditedSinceImport", "Draft", "Respons
 const OUTCOME = ["Imported", "Updated", "Skipped", "Failed"];
 const STATUS_TEXT = { New: "New", AlreadyImported: "Already imported", EditedSinceImport: "Edited", Draft: "Draft", Response: "Response", Filtered: "Filtered" };
 
+function count(n, word) {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
+}
+
 function esc(value) {
   return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 }
@@ -326,6 +330,7 @@ class MediumImportDashboard extends Base {
       this.#fail(e);
     }
     this.#busy = false;
+    this.#renderBanner();
     this.#renderList();
     this.#refreshControls();
   }
@@ -370,7 +375,7 @@ class MediumImportDashboard extends Base {
       this.querySelector("#mi-skipped").textContent = "";
       return;
     }
-    this.querySelector("#mi-skipped").textContent = `${p.stories.length} posts, ${p.drafts} drafts and ${p.responses} responses skipped`;
+    this.querySelector("#mi-skipped").textContent = `${count(p.stories.length, "post")}, ${count(p.drafts, "draft")} and ${count(p.responses, "response")} skipped`;
     const rows = p.stories.map((s) => {
       const status = named(STATUS, s.status);
       const off = this.#disabledStory(s);
