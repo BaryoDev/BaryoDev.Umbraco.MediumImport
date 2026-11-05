@@ -34,11 +34,13 @@ public sealed partial class HttpImageFetcher : IImageFetcher
 
         try
         {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(_options.HttpTimeoutSeconds));
             HttpClient http = _factory.CreateClient(ClientName);
             Uri current = url;
             for (int hop = 0; hop <= MaxRedirects; hop++)
             {
-                using HttpResponseMessage res = await http.GetAsync(current, HttpCompletionOption.ResponseHeadersRead, ct);
+                using HttpResponseMessage res = await http.GetAsync(current, HttpCompletionOption.ResponseHeadersRead, cts.Token);
 
                 if (IsRedirect(res.StatusCode))
                 {
@@ -67,7 +69,7 @@ public sealed partial class HttpImageFetcher : IImageFetcher
                     return null;
                 }
 
-                byte[]? bytes = await BoundedRead.ReadAsync(res.Content, _options.MaxImageBytes, ct);
+                byte[]? bytes = await BoundedRead.ReadAsync(res.Content, _options.MaxImageBytes, cts.Token);
                 if (bytes is null)
                 {
                     _logger.LogWarning("Skipped image {Url}: over {Max} bytes", url, _options.MaxImageBytes);
@@ -79,7 +81,7 @@ public sealed partial class HttpImageFetcher : IImageFetcher
 
             return null;
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or UriFormatException)
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or UriFormatException or IOException)
         {
             if (ct.IsCancellationRequested)
             {

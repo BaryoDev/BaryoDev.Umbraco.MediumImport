@@ -29,17 +29,19 @@ public sealed partial class GistClient : IGistClient
 
         try
         {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(_options.HttpTimeoutSeconds));
             HttpClient http = _factory.CreateClient(HttpImageFetcher.ClientName);
             using var request = new HttpRequestMessage(HttpMethod.Get, "https://api.github.com/gists/" + gistId);
             request.Headers.Accept.ParseAdd("application/vnd.github+json");
-            using HttpResponseMessage res = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+            using HttpResponseMessage res = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cts.Token);
             if (!res.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Gist {Id} skipped: status {Status}", gistId, (int)res.StatusCode);
                 return null;
             }
 
-            byte[]? body = await BoundedRead.ReadAsync(res.Content, _options.MaxGistBytes, ct);
+            byte[]? body = await BoundedRead.ReadAsync(res.Content, _options.MaxGistBytes, cts.Token);
             if (body is null)
             {
                 _logger.LogWarning("Gist {Id} skipped: over {Max} bytes", gistId, _options.MaxGistBytes);
@@ -48,7 +50,7 @@ public sealed partial class GistClient : IGistClient
 
             return Map(gistId, body);
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException)
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or JsonException or InvalidOperationException or IOException or ArgumentException)
         {
             if (ct.IsCancellationRequested)
             {
@@ -97,7 +99,9 @@ public sealed partial class GistClient : IGistClient
             mapped.Add(new GistFile(name, language, content));
         }
 
-        Uri htmlUrl = Uri.TryCreate(Str(root, "html_url"), UriKind.Absolute, out Uri? u) && u.Scheme == Uri.UriSchemeHttps
+        Uri htmlUrl = Uri.TryCreate(Str(root, "html_url"), UriKind.Absolute, out Uri? u)
+            && u.Scheme == Uri.UriSchemeHttps
+            && u.Host.Equals("gist.github.com", StringComparison.OrdinalIgnoreCase)
             ? u
             : new Uri("https://gist.github.com/" + gistId);
         return new Gist(gistId, htmlUrl, mapped);
@@ -106,6 +110,6 @@ public sealed partial class GistClient : IGistClient
     private static string? Str(JsonElement e, string name) =>
         e.TryGetProperty(name, out JsonElement v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
 
-    [GeneratedRegex("^[0-9a-f]{1,64}$")]
+    [GeneratedRegex("^[0-9a-f]{1,64}\\z")]
     private static partial Regex GistId();
 }
