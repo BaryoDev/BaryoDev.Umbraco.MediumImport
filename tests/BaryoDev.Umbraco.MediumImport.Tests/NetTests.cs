@@ -67,11 +67,11 @@ public class NetTests
     {
         var (fetcher, handler) = Fetcher();
         handler.Route(Img.AbsoluteUri, () => FakeHandler.Redirect("/other/pic.png"))
-            .Route("https://miro.medium.com/other/pic.png", () => FakeHandler.Bytes([1, 2, 3], "image/png"));
+            .Route("https://miro.medium.com/other/pic.png", () => FakeHandler.Bytes([0x89, 0x50, 0x4E, 0x47, 1], "image/png"));
         FetchedImage? got = await fetcher.FetchAsync(Img, TestContext.Current.CancellationToken);
         Assert.NotNull(got);
         Assert.Equal("pic.png", got.FileName);
-        Assert.Equal(new byte[] { 1, 2, 3 }, got.Bytes);
+        Assert.Equal(new byte[] { 0x89, 0x50, 0x4E, 0x47, 1 }, got.Bytes);
         Assert.Equal(2, handler.Requests.Count);
     }
 
@@ -100,6 +100,18 @@ public class NetTests
         var (fetcher, handler) = Fetcher();
         handler.Enqueue(() => FakeHandler.Bytes([1], "text/html"));
         Assert.Null(await fetcher.FetchAsync(Img, TestContext.Current.CancellationToken));
+    }
+
+    [Theory]
+    [InlineData("image/svg+xml", "<svg xmlns=\"http://www.w3.org/2000/svg\"><script>alert(1)</script></svg>")]
+    [InlineData("image/png", "<?xml version=\"1.0\"?><svg onload=\"alert(1)\"></svg>")]
+    [InlineData("image/avif", "....ftypavif")]
+    public async Task Svg_image_is_rejected(string contentType, string body)
+    {
+        var (fetcher, handler) = Fetcher();
+        var url = new Uri("https://miro.medium.com/v2/resize:fit:700/1*logo.svg");
+        handler.Enqueue(() => FakeHandler.Bytes(System.Text.Encoding.UTF8.GetBytes(body), contentType));
+        Assert.Null(await fetcher.FetchAsync(url, TestContext.Current.CancellationToken));
     }
 
     [Fact]

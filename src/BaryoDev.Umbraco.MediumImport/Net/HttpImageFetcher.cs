@@ -7,7 +7,7 @@ namespace BaryoDev.Umbraco.MediumImport.Net;
 
 /// <summary>
 /// Downloads Medium images. https only, two Medium CDN hosts, redirects followed by hand (at most 3,
-/// each target checked), image content types only, and a size cap enforced as the bytes arrive.
+/// each target checked), image content types and JPEG, PNG, GIF or WebP bytes only, and a size cap enforced as the bytes arrive.
 /// </summary>
 public sealed partial class HttpImageFetcher : IImageFetcher
 {
@@ -76,7 +76,15 @@ public sealed partial class HttpImageFetcher : IImageFetcher
                     return null;
                 }
 
-                return new FetchedImage(WithExtension(FileNameFor(current), bytes, type), bytes);
+                // The bytes decide, not the header or the URL. SVG and anything else that is not a raster image is refused.
+                string? ext = SniffExtension(bytes);
+                if (ext is null)
+                {
+                    _logger.LogWarning("Skipped image {Url}: not a JPEG, PNG, GIF or WebP image", url);
+                    return null;
+                }
+
+                return new FetchedImage(WithExtension(FileNameFor(current), ext), bytes);
             }
 
             return null;
@@ -109,31 +117,13 @@ public sealed partial class HttpImageFetcher : IImageFetcher
         return safe.Length == 0 ? "medium-image" : safe;
     }
 
-    private static readonly string[] KnownExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".avif"];
+    private static readonly string[] KnownExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
 
-    /// <summary>
-    /// Adds an extension when the name has no known image one. The bytes decide; the content type is the
-    /// fallback. When neither names a known type the name is left as it was.
-    /// </summary>
-    internal static string WithExtension(string name, byte[] bytes, string? contentType)
-    {
-        if (KnownExtensions.Contains(Path.GetExtension(name), StringComparer.OrdinalIgnoreCase))
-        {
-            return name;
-        }
+    /// <summary>Adds the sniffed extension when the name has no known raster one.</summary>
+    internal static string WithExtension(string name, string sniffedExtension) =>
+        KnownExtensions.Contains(Path.GetExtension(name), StringComparer.OrdinalIgnoreCase) ? name : name + sniffedExtension;
 
-        string? ext = SniffExtension(bytes) ?? contentType?.ToLowerInvariant() switch
-        {
-            "image/jpeg" or "image/jpg" => ".jpg",
-            "image/png" => ".png",
-            "image/gif" => ".gif",
-            "image/webp" => ".webp",
-            _ => null,
-        };
-        return ext is null ? name : name + ext;
-    }
-
-    private static string? SniffExtension(byte[] b)
+    internal static string? SniffExtension(byte[] b)
     {
         if (b.Length >= 3 && b[0] == 0xFF && b[1] == 0xD8 && b[2] == 0xFF)
         {
