@@ -4,5 +4,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/BaryoDev.Umbraco.MediumImport.Tests/BaryoDev.Umbraco.MediumImport.Tests.csproj" />
+    <Project Path="tests/BaryoDev.Umbraco.MediumImport.IntegrationTests/BaryoDev.Umbraco.MediumImport.IntegrationTests.csproj" />
   </Folder>
 </Solution>
