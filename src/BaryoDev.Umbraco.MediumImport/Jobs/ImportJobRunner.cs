@@ -31,9 +31,14 @@ public sealed class ImportJobRunner(
             {
                 logger.LogError(e, "The Medium import runner hit an error and will try again.");
             }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            catch (OperationCanceledException e)
             {
-                return;
+                if (stoppingToken.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                logger.LogError(e, "The Medium import runner hit an error and will try again.");
             }
 
             if (!worked)

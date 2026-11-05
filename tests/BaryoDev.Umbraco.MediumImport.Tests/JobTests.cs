@@ -1,5 +1,8 @@
 using BaryoDev.Umbraco.MediumImport.Engine;
 using BaryoDev.Umbraco.MediumImport.Jobs;
+using Microsoft.Extensions.Logging.Abstractions;
+using Umbraco.Cms.Core;
+using Umbraco.Cms.Core.Services;
 
 namespace BaryoDev.Umbraco.MediumImport.Tests;
 
@@ -129,5 +132,69 @@ public class JobTests
 
         Assert.Equal(JobState.Cancelled, job.State);
         Assert.Null(job.Error);
+    }
+
+    [Fact]
+    public async Task Runner_survives_a_cancellation_that_is_not_its_own()
+    {
+        var runtime = new ThrowOnceRuntimeState();
+        var runner = new ImportJobRunner(new ImportJobStore(), new ImportJobUnit(null!, null!, null!), runtime, NullLogger<ImportJobRunner>.Instance);
+
+        await runner.StartAsync(TestContext.Current.CancellationToken);
+        DateTime deadline = DateTime.UtcNow.AddSeconds(10);
+        while (runtime.Reads < 2 && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+        }
+
+        Assert.True(runtime.Reads >= 2);
+        Assert.NotNull(runner.ExecuteTask);
+        Assert.False(runner.ExecuteTask.IsCompleted);
+
+        await runner.StopAsync(TestContext.Current.CancellationToken);
+        Assert.True(runner.ExecuteTask.IsCompleted);
+    }
+
+    private sealed class ThrowOnceRuntimeState : IRuntimeState
+    {
+        private int _reads;
+
+        public int Reads => Volatile.Read(ref _reads);
+
+        public RuntimeLevelReason Reason => RuntimeLevelReason.Run;
+
+        public string? CurrentMigrationState => null;
+
+        public string? FinalMigrationState => null;
+
+        public global::Umbraco.Cms.Core.Semver.SemVersion? CurrentMigrationVersion => null;
+
+        public global::Umbraco.Cms.Core.Exceptions.BootFailedException? BootFailedException => null;
+
+        public Version Version => new(17, 0, 0);
+
+        public string VersionComment => string.Empty;
+
+        public global::Umbraco.Cms.Core.Semver.SemVersion SemanticVersion => new(17, 0, 0);
+
+        public IReadOnlyDictionary<string, object> StartupState => new Dictionary<string, object>();
+
+        public void Configure(RuntimeLevel level, RuntimeLevelReason reason, Exception? bootFailedException = null) =>
+            throw new NotSupportedException();
+
+        public void DetermineRuntimeLevel() => throw new NotSupportedException();
+
+        public RuntimeLevel Level
+        {
+            get
+            {
+                if (Interlocked.Increment(ref _reads) == 1)
+                {
+                    throw new OperationCanceledException();
+                }
+
+                return RuntimeLevel.Install;
+            }
+        }
     }
 }
