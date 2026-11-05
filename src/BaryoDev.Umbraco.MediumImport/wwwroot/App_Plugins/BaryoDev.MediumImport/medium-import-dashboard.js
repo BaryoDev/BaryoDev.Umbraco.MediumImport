@@ -29,6 +29,15 @@ function esc(value) {
 
 const named = (list, v) => (typeof v === "number" ? list[v] : v);
 
+// The document picker registers lazily. Wait for it, but not forever.
+function pickerReady() {
+  if (customElements.get("umb-input-document")) return Promise.resolve(true);
+  let timer;
+  const timeout = new Promise((resolve) => { timer = setTimeout(() => resolve(false), 3000); });
+  const defined = customElements.whenDefined("umb-input-document").then(() => true, () => false);
+  return Promise.race([defined, timeout]).finally(() => clearTimeout(timer));
+}
+
 const tokens = new WeakMap();
 
 async function token(host) {
@@ -96,14 +105,22 @@ class MediumImportDashboard extends Base {
   #previewTimer = null;
   #error = "";
   #notice = "";
+  #info = "";
   #busy = false;
   #running = false;
+  #disconnected = false;
+  #pollFailures = 0;
 
-  connectedCallback() {
+  async connectedCallback() {
     super.connectedCallback?.();
-    this.innerHTML = this.#shell();
+    this.#disconnected = false;
+    const hasPicker = await pickerReady();
+    if (this.#disconnected) return;
+    this.innerHTML = this.#shell(hasPicker);
     this.querySelector("#mi-file").addEventListener("change", () => this.#upload());
-    this.querySelector("#mi-parent").addEventListener("change", () => this.#onParent());
+    const parent = this.querySelector("#mi-parent");
+    parent.addEventListener("change", () => this.#onParent());
+    if (!hasPicker) parent.addEventListener("input", () => this.#onParent());
     this.querySelector("#mi-type").addEventListener("change", () => this.#onType());
     for (const id of ["mi-publish", "mi-canonical"]) {
       this.querySelector(`#${id}`).addEventListener("change", () => this.#onSettings());
@@ -125,12 +142,12 @@ class MediumImportDashboard extends Base {
 
   disconnectedCallback() {
     super.disconnectedCallback?.();
+    this.#disconnected = true;
     clearTimeout(this.#timer);
     clearTimeout(this.#previewTimer);
   }
 
-  #shell() {
-    const hasPicker = !!customElements.get("umb-input-document");
+  #shell(hasPicker) {
     return `
       <link rel="stylesheet" href="${BASE}/brand.css">
       <div class="mi">
@@ -214,7 +231,7 @@ class MediumImportDashboard extends Base {
       if (!s) return;
       this.#saved = s;
       this.querySelector("#mi-publish").value = s.publish ? "yes" : "no";
-      this.querySelector("#mi-canonical").value = named(["ThisSite", "KeepMedium"], s.canonical) ?? "ThisSite";
+      this.querySelector("#mi-canonical").value = s.canonical || "ThisSite";
       const parent = this.querySelector("#mi-parent");
       if (s.parentKey && s.parentKey !== "00000000-0000-0000-0000-000000000000") {
         if ("selection" in parent || parent.tagName.toLowerCase() === "umb-input-document") parent.selection = [s.parentKey];
@@ -289,6 +306,8 @@ class MediumImportDashboard extends Base {
     const file = this.querySelector("#mi-file").files?.[0];
     if (!file) return;
     this.#error = "";
+    this.#info = "";
+    this.#notice = "";
     this.#result = null;
     this.#busy = true;
     this.#renderBanner();
@@ -299,6 +318,7 @@ class MediumImportDashboard extends Base {
       const r = await call(this, "/upload", "POST", form);
       this.#uploadId = r.uploadId;
       this.#checked.clear();
+      this.#job = null;
       await this.#loadPreview();
     } catch (e) {
       this.#uploadId = null;
@@ -314,10 +334,17 @@ class MediumImportDashboard extends Base {
     if (!this.#uploadId) return;
     try {
       this.#preview = await call(this, "/preview", "POST", { uploadId: this.#uploadId, settings: this.#settings() });
+      this.#checked.clear();
       this.#error = "";
     } catch (e) {
       this.#preview = null;
-      this.#fail(e);
+      if (e.status === 404 && e.code === "upload") {
+        this.#uploadId = null;
+        this.#checked.clear();
+        this.#fail(new Error("Upload the zip again."));
+      } else {
+        this.#fail(e);
+      }
     }
     this.#renderList();
     this.#refreshControls();
@@ -338,7 +365,11 @@ class MediumImportDashboard extends Base {
     const posts = this.querySelector("#mi-posts");
     const p = this.#preview;
     posts.hidden = !p;
-    if (!p) return;
+    if (!p) {
+      this.querySelector("#mi-list").innerHTML = "";
+      this.querySelector("#mi-skipped").textContent = "";
+      return;
+    }
     this.querySelector("#mi-skipped").textContent = `${p.stories.length} posts, ${p.drafts} drafts and ${p.responses} responses skipped`;
     const rows = p.stories.map((s) => {
       const status = named(STATUS, s.status);
@@ -371,8 +402,8 @@ class MediumImportDashboard extends Base {
     this.querySelector("#mi-cancel").hidden = !this.#running;
     this.querySelector("#mi-progress").hidden = !this.#running && !this.#job;
     for (const box of this.querySelectorAll("#mi-list input[data-post]")) {
-      const s = this.#preview.stories.find((x) => x.postId === box.dataset.post);
-      box.disabled = this.#running || this.#disabledStory(s);
+      const s = this.#preview?.stories?.find((x) => x.postId === box.dataset.post);
+      box.disabled = this.#running || !s || this.#disabledStory(s);
     }
     this.querySelector("#mi-file").disabled = this.#running;
   }
@@ -382,12 +413,15 @@ class MediumImportDashboard extends Base {
   async #start() {
     this.#error = "";
     this.#notice = "";
+    this.#info = "";
     this.#result = null;
+    this.#renderBanner();
     this.#renderResult();
     try {
       const r = await call(this, "/import", "POST", { uploadId: this.#uploadId, postIds: this.#selectedIds(), settings: this.#settings() });
       this.#job = { id: r.jobId, state: "Queued", done: 0, total: this.#selectedIds().length, current: null };
       this.#running = true;
+      this.#pollFailures = 0;
       this.#renderProgress();
       this.#refreshControls();
       this.#poll();
@@ -401,8 +435,12 @@ class MediumImportDashboard extends Base {
 
   async #poll() {
     clearTimeout(this.#timer);
+    if (this.#disconnected) return;
+    let ended = false;
     try {
       const j = await call(this, `/jobs/${this.#job.id}`);
+      if (this.#disconnected) return;
+      this.#pollFailures = 0;
       this.#job = j;
       this.#renderProgress();
       if (j.state === "Queued" || j.state === "Running") {
@@ -413,15 +451,30 @@ class MediumImportDashboard extends Base {
       if (j.state === "Failed") this.#error = j.error || "The import failed. The details are in the server log.";
       else if (j.state === "Cancelled") this.#notice = "The import was cancelled. Posts already imported are kept.";
       this.#result = j.result;
+      ended = true;
     } catch (e) {
+      if (this.#disconnected) return;
+      if (e.status !== 404 && this.#pollFailures < 3) {
+        this.#pollFailures++;
+        this.#timer = setTimeout(() => this.#poll(), 1000);
+        return;
+      }
       this.#running = false;
       if (e.status === 404) this.#error = STOPPED;
       else this.#error = e.message;
     }
+    if (ended) {
+      // The server deletes the upload when a job ends, so the list cannot be rebuilt.
+      this.#uploadId = null;
+      this.#preview = null;
+      this.#checked.clear();
+      this.#info = "Upload the zip again to import more posts.";
+      this.querySelector("#mi-file").value = "";
+    }
     this.#renderBanner();
     this.#renderResult();
+    this.#renderList();
     this.#refreshControls();
-    if (this.#uploadId) this.#loadPreview();
   }
 
   async #cancel() {
@@ -457,6 +510,7 @@ class MediumImportDashboard extends Base {
     this.querySelector("#mi-banner").innerHTML =
       (this.#error ? `<div class="mi-err" role="alert">${esc(this.#error)}</div>` : "")
       + (this.#notice ? `<div class="mi-warn">${esc(this.#notice)}</div>` : "")
+      + (this.#info ? `<div class="mi-msg">${esc(this.#info)}</div>` : "")
       + (this.#busy ? `<div class="mi-msg">Reading the export...</div>` : "");
   }
 
