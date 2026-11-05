@@ -112,6 +112,6 @@ public class MigrationTests : UmbracoIntegrationTest
             () => ((StoryKeyRepository)Stories).UpsertCore(
                 new StoryKeyRow { PostId = "x", ContentKey = Guid.NewGuid(), ValuesHash = "h", ImportedUtc = DateTime.UtcNow },
                 skipRead: true),
-            Throws.Exception);
+            Throws.InstanceOf<System.Data.Common.DbException>());
     }
 }
