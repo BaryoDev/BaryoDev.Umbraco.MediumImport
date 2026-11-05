@@ -4,7 +4,8 @@ name: Publish to NuGet
 # published version is always recorded in git and the tag has to agree with it.
 #
 # A merge to main is the release switch: when <Version> is new on nuget.org the run publishes and
-# tags the commit, and when it is not the run stops after the check job.
+# tags the commit, and when it is not the run stops after the check job. A manual run builds,
+# tests and packs but never publishes.
 on:
   push:
     branches:
@@ -12,11 +13,9 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
-    inputs:
-      dry_run:
-        description: "Build, test and pack without publishing"
-        type: boolean
-        default: true
+
+permissions:
+  contents: read
 
 concurrency:
   group: publish
@@ -71,7 +70,7 @@ jobs:
           echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
           echo "$VERSION needs publishing: $PUBLISH"
 
-  publish:
+  build:
     needs: check
     if: needs.check.outputs.publish == 'true'
     runs-on: ubuntu-latest
@@ -79,12 +78,19 @@ jobs:
       version: ${{ steps.version.outputs.version }}
     permissions:
       contents: read
-      # Lets the runner mint the OIDC token nuget.org exchanges for a short-lived API key. No
-      # long-lived secret is stored in this repository.
-      id-token: write
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Require a tag to point at a commit on main
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_SHA is not on main. A tag must point at a reviewed commit." && exit 1
+          fi
 
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
@@ -108,9 +114,98 @@ jobs:
             echo "::error::Tag $TAG does not match <Version> $VERSION" && exit 1
           fi
 
-      - name: Refuse to republish a version that already exists
+      - name: Install gitleaks
+        run: |
+          VERSION=8.28.0
+          SHA256=a65b5253807a68ac0cafa4414031fd740aeb55f54fb7e55f386acb52e6a840eb
+          curl -sSLf -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz"
+          echo "${SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          tar -xz -C /usr/local/bin -f gitleaks.tar.gz gitleaks
+          rm gitleaks.tar.gz
+
+      - name: Scan for secrets
+        run: gitleaks detect --source . --config .gitleaks.toml --redact --verbose
+
+      - run: dotnet restore src/BaryoDev.Umbraco.MediumImport/BaryoDev.Umbraco.MediumImport.csproj
+
+      - run: dotnet build src/BaryoDev.Umbraco.MediumImport/BaryoDev.Umbraco.MediumImport.csproj --configuration Release --no-restore
+
+      # A package must never ship without its tests having run.
+      - name: Test the package
+        run: dotnet test tests/BaryoDev.Umbraco.MediumImport.Tests --configuration Release --verbosity normal
+
+      - name: Pack
+        run: dotnet pack src/BaryoDev.Umbraco.MediumImport/BaryoDev.Umbraco.MediumImport.csproj --configuration Release --no-build --output ./nupkgs
+
+      - name: Confirm README is packed
         env:
           VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          unzip -l "./nupkgs/BaryoDev.Umbraco.MediumImport.$VERSION.nupkg" | grep -q 'README.md' || { echo "::error::README.md not packed"; exit 1; }
+
+      - name: List artifacts
+        run: ls -la ./nupkgs
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: nupkgs
+          path: |
+            ./nupkgs/*.nupkg
+            ./nupkgs/*.snupkg
+          if-no-files-found: error
+
+      # Everything above proves the source is correct. This proves the package restores and builds
+      # when it is consumed as a package.
+      - name: Install the package into a scratch site, as a consumer would
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          FEED="$PWD/nupkgs"
+          WORK=$(mktemp -d)
+          cd "$WORK"
+
+          dotnet new web -o consumer --framework net10.0 >/dev/null
+          cd consumer
+
+          # The local feed is listed alongside nuget.org for the package's own dependencies. The
+          # version is pinned, so a previously published build cannot be picked up instead.
+          cat > nuget.config <<XML
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="local" value="$FEED" />
+              <add key="nuget" value="https://api.nuget.org/v3/index.json" />
+            </packageSources>
+          </configuration>
+          XML
+
+          dotnet add package BaryoDev.Umbraco.MediumImport --version "$VERSION" --source "$FEED"
+          dotnet build --configuration Release
+
+  # Publishes the package the build job made. It checks out no repository code and runs no
+  # project code: it downloads the artifact, trades the OIDC token for a short-lived key and
+  # pushes. Gates: a push event only (never a manual run), a tag must point at a commit on main
+  # (checked in the build job), and the nuget environment, which can require an approval.
+  publish:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: nuget
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: nupkgs
+          path: ./nupkgs
+
+      - name: Refuse to republish a version that already exists
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
         run: |
           # nuget.org accepts a version once, forever. --skip-duplicate below would turn a repeat
           # into a silent success, so fail loudly here instead.
@@ -146,63 +241,8 @@ jobs:
               ;;
           esac
 
-      - run: dotnet restore src/BaryoDev.Umbraco.MediumImport/BaryoDev.Umbraco.MediumImport.csproj
-
-      - run: dotnet build src/BaryoDev.Umbraco.MediumImport/BaryoDev.Umbraco.MediumImport.csproj --configuration Release --no-restore
-
-      # A package must never ship without its tests having run.
-      - name: Test the package
-        run: dotnet test tests/BaryoDev.Umbraco.MediumImport.Tests --configuration Release --verbosity normal
-
-      - name: Pack
-        run: dotnet pack src/BaryoDev.Umbraco.MediumImport/BaryoDev.Umbraco.MediumImport.csproj --configuration Release --no-build --output ./nupkgs
-
-      - name: Confirm README is packed
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          unzip -l "./nupkgs/BaryoDev.Umbraco.MediumImport.$VERSION.nupkg" | grep -q 'README.md' || { echo "::error::README.md not packed"; exit 1; }
-
-      - name: List artifacts
-        run: ls -la ./nupkgs
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: nupkgs
-          path: ./nupkgs/*
-
-      # Everything above proves the source is correct. This proves the package restores and builds when it is
-      # consumed as a package.
-      - name: Install the package into a scratch site, as a consumer would
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          FEED="$PWD/nupkgs"
-          WORK=$(mktemp -d)
-          cd "$WORK"
-
-          dotnet new web -o consumer --framework net10.0 >/dev/null
-          cd consumer
-
-          # The local feed is listed alongside nuget.org for the package's own dependencies. The
-          # version is pinned, so a previously published build cannot be picked up instead.
-          cat > nuget.config <<XML
-          <?xml version="1.0" encoding="utf-8"?>
-          <configuration>
-            <packageSources>
-              <clear />
-              <add key="local" value="$FEED" />
-              <add key="nuget" value="https://api.nuget.org/v3/index.json" />
-            </packageSources>
-          </configuration>
-          XML
-
-          dotnet add package BaryoDev.Umbraco.MediumImport --version "$VERSION" --source "$FEED"
-          dotnet build --configuration Release
-
       # Requested here because the key expires after an hour and each OIDC token buys exactly one
-      # key. Runs on dry runs too, so a dry run verifies the trusted publishing policy. Obtaining
-      # a key publishes nothing.
+      # key. Obtaining a key publishes nothing.
       - name: Exchange OIDC token for a short-lived NuGet key
         id: nuget_login
         uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1
@@ -218,17 +258,13 @@ jobs:
           fi
           echo "Trusted publishing OK: short-lived key issued."
 
-      # Publication needs a push to main or a v* tag, the only push refs this workflow runs on. A
-      # manual run cannot reach this step, because it can run on a branch that has not been through
-      # a pull request.
       - name: Publish
-        if: github.event_name == 'push'
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.build.outputs.version }}
           NUGET_API_KEY: ${{ steps.nuget_login.outputs.NUGET_API_KEY }}
         run: |
           PKG="BaryoDev.Umbraco.MediumImport.$VERSION.nupkg"
-          test -f "./nupkgs/$PKG" || { echo "::error::$PKG was not packed"; exit 1; }
+          test -f "./nupkgs/$PKG" || { echo "::error::$PKG was not in the artifact"; exit 1; }
           dotnet nuget push "./nupkgs/$PKG" \
             --api-key "$NUGET_API_KEY" \
             --source https://api.nuget.org/v3/index.json \
@@ -237,7 +273,7 @@ jobs:
   # Its own job so the token that can write to the repository never sits beside the build, the
   # tests or the package install. A tag made with this token does not start another run.
   tag:
-    needs: publish
+    needs: [build, publish]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -246,7 +282,7 @@ jobs:
       - name: Tag the published commit
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: v${{ needs.publish.outputs.version }}
+          TAG: v${{ needs.build.outputs.version }}
         run: |
           if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" > /dev/null 2>&1; then
             echo "$TAG already exists."
