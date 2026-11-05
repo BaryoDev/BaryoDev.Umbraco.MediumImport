@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <PackageId>BaryoDev.Umbraco.MediumImport</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>BaryoDev</Authors>
+    <Description>Import your Medium export into Umbraco 17: code blocks kept exact, gists inlined, images copied to the media library, reruns update instead of duplicate.</Description>
+    <PackageTags>umbraco umbraco-marketplace medium import blog migration</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/BaryoDev/BaryoDev.Umbraco.MediumImport</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/BaryoDev/BaryoDev.Umbraco.MediumImport</RepositoryUrl>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <StaticWebAssetBasePath>/</StaticWebAssetBasePath>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Umbraco.Cms.Web.Common" Version="17.*" />
+    <PackageReference Include="Umbraco.Cms.Api.Management" Version="17.*" />
+    <PackageReference Include="HtmlAgilityPack" Version="1.*" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+    <InternalsVisibleTo Include="BaryoDev.Umbraco.MediumImport.Tests" />
+  </ItemGroup>
+</Project>

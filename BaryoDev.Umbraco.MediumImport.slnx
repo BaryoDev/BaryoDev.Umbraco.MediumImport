@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/BaryoDev.Umbraco.MediumImport/BaryoDev.Umbraco.MediumImport.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/BaryoDev.Umbraco.MediumImport.Tests/BaryoDev.Umbraco.MediumImport.Tests.csproj" />
+  </Folder>
+</Solution>
