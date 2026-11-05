@@ -76,7 +76,7 @@ public sealed partial class HttpImageFetcher : IImageFetcher
                     return null;
                 }
 
-                return new FetchedImage(FileNameFor(current), bytes);
+                return new FetchedImage(WithExtension(FileNameFor(current), bytes, type), bytes);
             }
 
             return null;
@@ -107,6 +107,56 @@ public sealed partial class HttpImageFetcher : IImageFetcher
         }
 
         return safe.Length == 0 ? "medium-image" : safe;
+    }
+
+    private static readonly string[] KnownExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".avif"];
+
+    /// <summary>
+    /// Adds an extension when the name has no known image one. The bytes decide; the content type is the
+    /// fallback. When neither names a known type the name is left as it was.
+    /// </summary>
+    internal static string WithExtension(string name, byte[] bytes, string? contentType)
+    {
+        if (KnownExtensions.Contains(Path.GetExtension(name), StringComparer.OrdinalIgnoreCase))
+        {
+            return name;
+        }
+
+        string? ext = SniffExtension(bytes) ?? contentType?.ToLowerInvariant() switch
+        {
+            "image/jpeg" or "image/jpg" => ".jpg",
+            "image/png" => ".png",
+            "image/gif" => ".gif",
+            "image/webp" => ".webp",
+            _ => null,
+        };
+        return ext is null ? name : name + ext;
+    }
+
+    private static string? SniffExtension(byte[] b)
+    {
+        if (b.Length >= 3 && b[0] == 0xFF && b[1] == 0xD8 && b[2] == 0xFF)
+        {
+            return ".jpg";
+        }
+
+        if (b.Length >= 4 && b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47)
+        {
+            return ".png";
+        }
+
+        if (b.Length >= 4 && b[0] == 0x47 && b[1] == 0x49 && b[2] == 0x46 && b[3] == 0x38)
+        {
+            return ".gif";
+        }
+
+        if (b.Length >= 12 && b[0] == 0x52 && b[1] == 0x49 && b[2] == 0x46 && b[3] == 0x46
+            && b[8] == 0x57 && b[9] == 0x45 && b[10] == 0x42 && b[11] == 0x50)
+        {
+            return ".webp";
+        }
+
+        return null;
     }
 
     [GeneratedRegex("[^A-Za-z0-9._-]")]

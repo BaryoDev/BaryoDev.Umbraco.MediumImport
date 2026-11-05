@@ -32,6 +32,28 @@ public class NetTests
     private static readonly Uri Img = new("https://miro.medium.com/v2/resize:fit:700/1*abc.png");
 
     [Fact]
+    public async Task Extensionless_jpeg_url_gets_jpg_extension()
+    {
+        var (fetcher, handler) = Fetcher();
+        var url = new Uri("https://miro.medium.com/v2/resize:fit:800/0*vm7eSkm-3cgmZyIe");
+        handler.Enqueue(() => FakeHandler.Bytes([0xFF, 0xD8, 0xFF, 0xE0, 0], "image/png"));
+        FetchedImage? got = await fetcher.FetchAsync(url, TestContext.Current.CancellationToken);
+        Assert.NotNull(got);
+        Assert.EndsWith(".jpg", got.FileName);
+    }
+
+    [Fact]
+    public async Task Extensionless_png_url_gets_png_extension()
+    {
+        var (fetcher, handler) = Fetcher();
+        var url = new Uri("https://miro.medium.com/v2/resize:fit:800/1*noext");
+        handler.Enqueue(() => FakeHandler.Bytes([0x89, 0x50, 0x4E, 0x47, 0x0D], "image/png"));
+        FetchedImage? got = await fetcher.FetchAsync(url, TestContext.Current.CancellationToken);
+        Assert.NotNull(got);
+        Assert.EndsWith(".png", got.FileName);
+    }
+
+    [Fact]
     public async Task Fetch_refuses_other_hosts_without_a_request()
     {
         var (fetcher, handler) = Fetcher();
