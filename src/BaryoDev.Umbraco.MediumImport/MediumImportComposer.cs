@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using BaryoDev.Umbraco.MediumImport.Engine;
 using BaryoDev.Umbraco.MediumImport.Identity;
 using BaryoDev.Umbraco.MediumImport.Net;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,5 +26,6 @@ public sealed class MediumImportComposer : IComposer
         builder.Services.AddTransient<IGistClient, GistClient>();
         builder.Services.AddSingleton<IStoryKeyRepository, StoryKeyRepository>();
         builder.Services.AddSingleton<IMediaKeyRepository, MediaKeyRepository>();
+        builder.Services.AddTransient<MediumImportEngine>();
     }
 }
