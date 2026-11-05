@@ -46,7 +46,12 @@ public sealed record StoryResult(
     IReadOnlyList<string> Warnings,
     IReadOnlyList<string> Failures);
 
-public sealed record ImportResult(IReadOnlyList<StoryResult> Stories);
+public sealed record ImportResult(IReadOnlyList<StoryResult> Stories)
+{
+    public bool Cancelled { get; init; }
+
+    public IReadOnlyList<string> Warnings { get; init; } = [];
+}
 
 public sealed record ImportProgress(int Done, int Total, string? Current);
 

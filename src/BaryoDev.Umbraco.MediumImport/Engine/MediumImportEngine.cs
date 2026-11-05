@@ -50,7 +50,7 @@ public sealed class MediumImportEngine
         var list = new List<PreviewStory>();
         foreach (MediumStory story in stories)
         {
-            (StoryStatus status, string? reason, Guid? key, _) = Classify(story, s);
+            (StoryStatus status, string? reason, Guid? key, _) = Classify(story, s, _stories.Get(story.PostId));
             list.Add(new PreviewStory(story.PostId, Title(story), story.Published, story.Images.Count, story.GistIds.Count, status, reason, key));
         }
 
@@ -73,13 +73,24 @@ public sealed class MediumImportEngine
         var imageCache = new Dictionary<Uri, ResolvedImage?>();
         var results = new List<StoryResult>();
         int done = 0;
+        bool cancelled = false;
         foreach (MediumStory story in selected)
         {
-            ct.ThrowIfCancellationRequested();
+            if (ct.IsCancellationRequested)
+            {
+                cancelled = true;
+                break;
+            }
+
             StoryResult result;
             try
             {
-                result = await ImportOneAsync(story, s, userId, gistCache, imageCache, ct);
+                result = await ImportOneAsync(story, s, userId, _stories.Get(story.PostId), gistCache, imageCache, ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                cancelled = true;
+                break;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -92,7 +103,11 @@ public sealed class MediumImportEngine
                 {
                     await callback.OnStoryAsync(story, result, ct);
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    cancelled = true;
+                }
+                catch (Exception ex)
                 {
                     result = result with { Warnings = [.. result.Warnings, "A callback failed: " + ex.Message] };
                 }
@@ -100,16 +115,28 @@ public sealed class MediumImportEngine
 
             results.Add(result);
             done++;
-            progress?.Report(new ImportProgress(done, selected.Count, story.Title));
+            progress?.Report(new ImportProgress(done, selected.Count, Title(story)));
+            if (cancelled)
+            {
+                break;
+            }
         }
 
-        var run = new ImportResult(results);
+        var warnings = new List<string>();
+        var run = new ImportResult(results) { Cancelled = cancelled };
         foreach (IMediumImportCallback callback in _callbacks)
         {
-            await callback.OnRunCompletedAsync(run, ct);
+            try
+            {
+                await callback.OnRunCompletedAsync(run, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                warnings.Add("A callback failed: " + ex.Message);
+            }
         }
 
-        return run;
+        return run with { Warnings = warnings };
     }
 
     private async Task<IReadOnlyList<MediumStory>> ReadAsync(Stream zip, CancellationToken ct)
@@ -166,10 +193,15 @@ public sealed class MediumImportEngine
         return ms;
     }
 
+    private static bool IsMediumHttps(Uri? url) =>
+        url is { IsAbsoluteUri: true } && url.Scheme == Uri.UriSchemeHttps
+        && (url.Host.Equals("medium.com", StringComparison.OrdinalIgnoreCase)
+            || url.Host.EndsWith(".medium.com", StringComparison.OrdinalIgnoreCase));
+
     private static string Title(MediumStory story) =>
         string.IsNullOrWhiteSpace(story.Title) ? story.PostId : story.Title;
 
-    private (StoryStatus Status, string? Reason, Guid? ContentKey, string? Hash) Classify(MediumStory story, ImportSettings s)
+    private (StoryStatus Status, string? Reason, Guid? ContentKey, string? Hash) Classify(MediumStory story, ImportSettings s, StoryKeyRow? row)
     {
         if (story.IsDraft)
         {
@@ -190,10 +222,9 @@ public sealed class MediumImportEngine
             }
         }
 
-        StoryKeyRow? row = _stories.Get(story.PostId);
         if (row is not null)
         {
-            IReadOnlyDictionary<string, string?>? mapped = _writer.ReadMapped(row.ContentKey, s.Mapping);
+            IReadOnlyDictionary<string, string?>? mapped = _writer.ReadMapped(row.ContentKey, s);
             if (mapped is null)
             {
                 return (StoryStatus.New, null, null, null);
@@ -205,9 +236,9 @@ public sealed class MediumImportEngine
                 : (StoryStatus.EditedSinceImport, "Edited since import", row.ContentKey, current);
         }
 
-        if (s.Mapping.OriginalUrl is not null && story.MediumUrl is not null)
+        if (s.Mapping.OriginalUrl is not null && IsMediumHttps(story.MediumUrl))
         {
-            Guid? found = _writer.FindByOriginalUrl(s, story.MediumUrl.AbsoluteUri);
+            Guid? found = _writer.FindByOriginalUrl(s, story.MediumUrl!.AbsoluteUri);
             if (found is not null)
             {
                 return (StoryStatus.AlreadyImported, "Found by original url", found, null);
@@ -221,23 +252,29 @@ public sealed class MediumImportEngine
         MediumStory story,
         ImportSettings s,
         int userId,
+        StoryKeyRow? row,
         Dictionary<string, Gist?> gistCache,
         Dictionary<Uri, ResolvedImage?> imageCache,
         CancellationToken ct)
     {
         string title = Title(story);
-        (StoryStatus status, string? reason, Guid? existing, _) = Classify(story, s);
+        (StoryStatus status, string? reason, Guid? existing, _) = Classify(story, s, row);
         switch (status)
         {
             case StoryStatus.Draft or StoryStatus.Response or StoryStatus.Filtered:
                 return new StoryResult(story.PostId, title, Outcome.Skipped, reason, null, [], []);
             case StoryStatus.EditedSinceImport:
                 return new StoryResult(story.PostId, title, Outcome.Skipped, "Edited since import", existing, [], []);
-            case StoryStatus.AlreadyImported when _stories.Get(story.PostId) is null:
+            case StoryStatus.AlreadyImported when row is null:
                 {
-                    // Found by original url: record the node so reruns track it.
-                    IReadOnlyDictionary<string, string?> adopted = _writer.ReadMapped(existing!.Value, s.Mapping) ?? new Dictionary<string, string?>();
-                    SaveRow(story.PostId, existing.Value, adopted);
+                    // Found by original url: the literal hash never matches, so reruns skip it as edited.
+                    _stories.Upsert(new StoryKeyRow
+                    {
+                        PostId = story.PostId,
+                        ContentKey = existing!.Value,
+                        ValuesHash = "adopted",
+                        ImportedUtc = DateTime.UtcNow,
+                    });
                     return new StoryResult(story.PostId, title, Outcome.Skipped, "Already on the site", existing, [], []);
                 }
         }
@@ -288,6 +325,7 @@ public sealed class MediumImportEngine
             else
             {
                 images[url] = resolved;
+                // The cover is the first resolved Medium image; failed and other-host images are not candidates.
                 cover ??= resolved;
             }
         }
@@ -323,7 +361,7 @@ public sealed class MediumImportEngine
 
         var post = new PostValues(title, _slugs?.SlugFor(story), values, m.Cover is null ? null : cover?.MediaKey);
         Guid key = _writer.Write(s, post, existing, userId);
-        IReadOnlyDictionary<string, string?> back = _writer.ReadMapped(key, m) ?? new Dictionary<string, string?>();
+        IReadOnlyDictionary<string, string?> back = _writer.ReadMapped(key, s) ?? new Dictionary<string, string?>();
         SaveRow(story.PostId, key, back);
 
         return new StoryResult(story.PostId, title, existing is null ? Outcome.Imported : Outcome.Updated, null, key, warnings, failures);

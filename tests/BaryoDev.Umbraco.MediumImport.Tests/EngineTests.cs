@@ -345,13 +345,97 @@ public class EngineTests
         rig.Spy.AfterStory = _ => cts.Cancel();
         ImportSettings s = Settings();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => rig.Engine().ImportAsync(AllFixtures(), Ids(Code, Skills), s, 1, null, cts.Token));
+        await rig.Engine().ImportAsync(AllFixtures(), Ids(Code, Skills), s, 1, null, cts.Token);
 
         Assert.Single(rig.Keys.Rows);
         PreviewResult preview = await rig.Engine().PreviewAsync(AllFixtures(), s, CancellationToken.None);
         Assert.Equal(StoryStatus.AlreadyImported, preview.Stories.Single(x => x.PostId == Code).Status);
         Assert.Equal(StoryStatus.New, preview.Stories.Single(x => x.PostId == Skills).Status);
+    }
+
+    [Fact]
+    public async Task Cancel_returns_partial_result_and_runs_completed()
+    {
+        var rig = new Rig();
+        using var cts = new CancellationTokenSource();
+        rig.Spy.AfterStory = _ => cts.Cancel();
+
+        ImportResult run = await rig.Engine().ImportAsync(AllFixtures(), Ids(Code, Skills), Settings(), 1, null, cts.Token);
+
+        Assert.Single(run.Stories);
+        Assert.True(run.Cancelled);
+        Assert.Equal(1, rig.Spy.Completed);
+    }
+
+    [Fact]
+    public async Task Run_completed_callback_failure_becomes_warning()
+    {
+        var rig = new Rig();
+        rig.Spy.ThrowOnCompleted = true;
+
+        ImportResult run = await rig.Engine().ImportAsync(AllFixtures(), Ids(Code), Settings(), 1, null, CancellationToken.None);
+
+        Assert.Contains(run.Warnings, w => w.StartsWith("A callback failed:", StringComparison.Ordinal));
+        Assert.Single(run.Stories);
+    }
+
+    [Fact]
+    public async Task Adopted_post_is_not_overwritten_on_rerun()
+    {
+        var rig = new Rig();
+        var node = Guid.NewGuid();
+        rig.Writer.Nodes[node] = new() { ["title"] = "Hand made" };
+        rig.Writer.ByOriginalUrl["https://medium.com/@someone/code-and-gists-0a1b2c3d4e5f"] = node;
+        ImportSettings s = Settings();
+
+        await rig.Engine().ImportAsync(AllFixtures(), Ids(Code), s, 1, null, CancellationToken.None);
+        ImportResult second = await rig.Engine().ImportAsync(AllFixtures(), Ids(Code), s, 1, null, CancellationToken.None);
+
+        Assert.Equal(0, rig.Writer.Writes);
+        Assert.Equal(Outcome.Skipped, second.Stories.Single().Outcome);
+        Assert.Equal("Edited since import", second.Stories.Single().Reason);
+    }
+
+    [Fact]
+    public async Task Row_pointing_outside_parent_imports_as_new()
+    {
+        var rig = new Rig();
+        ImportSettings s = Settings();
+        ImportResult first = await rig.Engine().ImportAsync(AllFixtures(), Ids(Code), s, 1, null, CancellationToken.None);
+        rig.Writer.OutOfScope.Add(first.Stories.Single().ContentKey!.Value);
+
+        ImportResult second = await rig.Engine().ImportAsync(AllFixtures(), Ids(Code), s, 1, null, CancellationToken.None);
+
+        Assert.Equal(Outcome.Imported, second.Stories.Single().Outcome);
+        Assert.Null(rig.Writer.LastExisting);
+    }
+
+    [Theory]
+    [InlineData("http://medium.com/x")]
+    [InlineData("https://evil.example/x")]
+    [InlineData("https://notmedium.com/x")]
+    public async Task Adoption_skipped_for_non_medium_url(string url)
+    {
+        var rig = new Rig();
+        (string name, string html) = Post("2024-01-02");
+        using MemoryStream zip = Zip((name, html.Replace("https://medium.com/@someone/code-and-gists-0a1b2c3d4e5f", url)));
+
+        await rig.Engine().PreviewAsync(zip, Settings(), CancellationToken.None);
+
+        Assert.Equal(0, rig.Writer.FindCalls);
+    }
+
+    [Fact]
+    public async Task Same_image_url_fetched_once_per_run()
+    {
+        var rig = new Rig();
+        (string n1, string h1) = Post("2024-01-02");
+        (string n2, string h2) = Post("2025-01-15");
+        using MemoryStream zip = Zip((n1, h1), (n2, h2.Replace("1*skills.png", "1*one.png")));
+
+        await rig.Engine().ImportAsync(zip, Ids(Code, Skills), Settings(), 1, null, CancellationToken.None);
+
+        Assert.Equal(1, rig.Images.Requests.Count(u => u.AbsoluteUri.EndsWith("1*one.png", StringComparison.Ordinal)));
     }
 
     [Fact]

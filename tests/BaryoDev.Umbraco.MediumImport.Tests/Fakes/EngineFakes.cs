@@ -13,14 +13,22 @@ public sealed class FakePostWriter : IPostWriter
     public Dictionary<Guid, PostValues> Last { get; } = new();
     public Dictionary<string, Guid> ByOriginalUrl { get; } = new();
     public int Creates { get; private set; }
+    public HashSet<Guid> OutOfScope { get; } = [];
+    public int FindCalls { get; private set; }
+    public int Writes { get; private set; }
+    public Guid? LastExisting { get; private set; }
     public string? ThrowForName { get; set; }
 
-    public Guid? FindByOriginalUrl(ImportSettings s, string url) =>
-        ByOriginalUrl.TryGetValue(url, out Guid k) ? k : null;
-
-    public IReadOnlyDictionary<string, string?>? ReadMapped(Guid contentKey, FieldMapping m)
+    public Guid? FindByOriginalUrl(ImportSettings s, string url)
     {
-        if (!Nodes.TryGetValue(contentKey, out var node))
+        FindCalls++;
+        return ByOriginalUrl.TryGetValue(url, out Guid k) ? k : null;
+    }
+
+    public IReadOnlyDictionary<string, string?>? ReadMapped(Guid contentKey, ImportSettings settings)
+    {
+        FieldMapping m = settings.Mapping;
+        if (OutOfScope.Contains(contentKey) || !Nodes.TryGetValue(contentKey, out var node))
         {
             return null;
         }
@@ -52,6 +60,8 @@ public sealed class FakePostWriter : IPostWriter
             throw new InvalidOperationException("writer failed for " + v.Name);
         }
 
+        Writes++;
+        LastExisting = existing;
         Guid key = existing ?? Guid.NewGuid();
         if (existing is null)
         {
@@ -131,6 +141,7 @@ public sealed class CallbackSpy : IMediumImportCallback
     public List<string> Stories { get; } = [];
     public int Completed { get; private set; }
     public Action<StoryResult>? AfterStory { get; set; }
+    public bool ThrowOnCompleted { get; set; }
 
     public Task OnStoryAsync(MediumStory story, StoryResult result, CancellationToken ct)
     {
@@ -142,6 +153,11 @@ public sealed class CallbackSpy : IMediumImportCallback
     public Task OnRunCompletedAsync(ImportResult result, CancellationToken ct)
     {
         Completed++;
+        if (ThrowOnCompleted)
+        {
+            throw new InvalidOperationException("completed boom");
+        }
+
         return Task.CompletedTask;
     }
 }
