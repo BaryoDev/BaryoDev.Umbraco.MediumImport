@@ -18,6 +18,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="fixtures/**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../../src/BaryoDev.Umbraco.MediumImport/BaryoDev.Umbraco.MediumImport.csproj" />
   </ItemGroup>
 
