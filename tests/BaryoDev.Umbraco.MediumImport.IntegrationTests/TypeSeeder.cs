@@ -25,7 +25,7 @@ public static class TypeSeeder
         {
             ("title", textBox), ("body", richText), ("publishDate", date), ("summary", textArea),
             ("cover", picker), ("tags", tags), ("canonical", textBox), ("originalUrl", textBox),
-            ("headline", textBox), ("umbracoUrlName", textBox),
+            ("headline", textBox), ("umbracoUrlName", textBox), ("tagsText", textBox),
         });
         CreateType(services, "bare", false, [], new (string, IDataType)[] { ("title", textBox), ("body", richText) });
         CreateType(services, "blog", true, ["post", "bare"], new (string, IDataType)[] { ("title", textBox) });

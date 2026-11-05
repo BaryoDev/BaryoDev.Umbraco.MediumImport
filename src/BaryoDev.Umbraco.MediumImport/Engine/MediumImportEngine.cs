@@ -1,3 +1,4 @@
+using System.Globalization;
 using BaryoDev.Umbraco.MediumImport.Content;
 using BaryoDev.Umbraco.MediumImport.Conversion;
 using BaryoDev.Umbraco.MediumImport.Identity;
@@ -247,7 +248,7 @@ public sealed class MediumImportEngine
             }
 
             string current = ValuesHash.Compute(mapped);
-            return current == row.ValuesHash
+            return current == row.ValuesHash || MatchesHashFrom010(story, s, mapped, row.ValuesHash)
                 ? (StoryStatus.AlreadyImported, null, row.ContentKey, current)
                 : (StoryStatus.EditedSinceImport, "Edited since import", row.ContentKey, current);
         }
@@ -262,6 +263,26 @@ public sealed class MediumImportEngine
         }
 
         return (StoryStatus.New, null, null, null);
+    }
+
+    // 0.1.0 hashed the publish date as assigned (milliseconds, Utc kind) instead of as stored. Accept that
+    // hash only while the stored date still equals the story's date, so an edit to any field reads as edited.
+    // The next import rewrites the row with the current hash.
+    private static bool MatchesHashFrom010(
+        MediumStory story, ImportSettings s, IReadOnlyDictionary<string, string?> mapped, string stored)
+    {
+        string? alias = s.Mapping.PublishDate;
+        if (alias is null || story.Published is not DateTime published
+            || !mapped.TryGetValue(alias, out string? date) || date != ValuesHash.Date(published))
+        {
+            return false;
+        }
+
+        var old = new Dictionary<string, string?>(mapped, StringComparer.Ordinal)
+        {
+            [alias] = published.ToString("o", CultureInfo.InvariantCulture),
+        };
+        return ValuesHash.Compute(old) == stored;
     }
 
     private async Task<StoryResult> ImportOneAsync(
@@ -385,6 +406,7 @@ public sealed class MediumImportEngine
         // The node and its key row succeed or fail together. If the publish throws, or the process dies
         // before Complete, the scope rolls the node back, so a rerun never sees a node without a row.
         // Nothing in this block awaits, so the ambient scope stays on this thread.
+        // ReadMapped here returns the cached node as assigned, not as stored; it is canonical so both hash the same.
         Guid key;
         using (ICoreScope? scope = _scopes?.CreateCoreScope())
         {

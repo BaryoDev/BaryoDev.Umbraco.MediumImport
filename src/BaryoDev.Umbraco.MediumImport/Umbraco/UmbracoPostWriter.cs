@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using HtmlAgilityPack;
 using BaryoDev.Umbraco.MediumImport.Engine;
+using BaryoDev.Umbraco.MediumImport.Identity;
 using BaryoDev.Umbraco.MediumImport.Parsing;
 using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.PropertyEditors;
@@ -89,7 +90,7 @@ public sealed class UmbracoPostWriter : IPostWriter
             {
                 null => null,
                 string raw when alias == m.Body && IsRichText(node, alias) => NormaliseRichText(raw),
-                DateTime d => d.ToString("o", CultureInfo.InvariantCulture),
+                DateTime d => ValuesHash.Date(d),
                 _ => Convert.ToString(v, CultureInfo.InvariantCulture),
             };
         }
@@ -173,7 +174,9 @@ public sealed class UmbracoPostWriter : IPostWriter
 
         if (settings.Mapping.Cover is not null && values.CoverMediaKey is Guid cover)
         {
-            node.SetValue(settings.Mapping.Cover, CoverJson(cover));
+            string alias = settings.Mapping.Cover;
+            Guid itemKey = existing is null ? Guid.NewGuid() : CoverItemKey(node, alias, cover) ?? Guid.NewGuid();
+            node.SetValue(alias, CoverJson(itemKey, cover));
         }
 
         _content.Save(node, userId);
@@ -209,12 +212,44 @@ public sealed class UmbracoPostWriter : IPostWriter
         node.SetValue(alias, value);
     }
 
-    private string CoverJson(Guid mediaKey) =>
+    // Reuse the picker item key when the node already shows this media, so a rerun writes the same value.
+    private static Guid? CoverItemKey(IContent node, string alias, Guid mediaKey)
+    {
+        if (!node.HasProperty(alias) || node.GetValue(alias) is not string raw || string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        try
+        {
+            if (JsonNode.Parse(raw) is not JsonArray items)
+            {
+                return null;
+            }
+
+            foreach (JsonNode? item in items)
+            {
+                if (item is JsonObject obj
+                    && Guid.TryParse(obj["mediaKey"]?.ToString(), out Guid media) && media == mediaKey
+                    && Guid.TryParse(obj["key"]?.ToString(), out Guid key))
+                {
+                    return key;
+                }
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+        }
+
+        return null;
+    }
+
+    private string CoverJson(Guid itemKey, Guid mediaKey) =>
         _json.Serialize(new[]
         {
             new
             {
-                key = Guid.NewGuid(),
+                key = itemKey,
                 mediaKey,
                 mediaTypeAlias = "Image",
                 crops = Array.Empty<object>(),
