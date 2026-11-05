@@ -188,7 +188,7 @@ public class CodeBlockTests
     }
 
     [Fact]
-    public void Pre_without_context_matches_baryoweb()
+    public void Pre_without_context_drops_the_language()
     {
         Assert.Equal("<pre>x</pre>", PostHtmlSanitizer.Sanitize("<pre data-code-block-lang=\"go\">x</pre>"));
     }
