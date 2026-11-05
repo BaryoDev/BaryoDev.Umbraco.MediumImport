@@ -53,12 +53,14 @@ public class RichTextRoundTripTests : ImportFixtureBase
     public async Task Save_without_change_keeps_hash()
     {
         Guid key = WriteFixtureBody();
-        string before = ValuesHash.Compute(Writer.ReadMapped(key, Settings())!);
+        var beforeValues = Writer.ReadMapped(key, Settings())!;
+        string before = ValuesHash.Compute(beforeValues);
 
         await ResaveUnchanged(key);
 
-        string after = ValuesHash.Compute(Writer.ReadMapped(key, Settings())!);
-        Assert.That(after, Is.EqualTo(before));
+        var afterValues = Writer.ReadMapped(key, Settings())!;
+        string after = ValuesHash.Compute(afterValues);
+        Assert.That(after, Is.EqualTo(before), () => Describe(beforeValues, afterValues));
     }
 
     private Guid WriteFixtureBody()
@@ -144,4 +146,12 @@ public class RichTextRoundTripTests : ImportFixtureBase
 
         throw new FileNotFoundException("code fixture not found above " + TestContext.CurrentContext.TestDirectory);
     }
+
+    private static string Describe(IReadOnlyDictionary<string, string?> before, IReadOnlyDictionary<string, string?> after) =>
+        string.Join("\n", before.Keys.Union(after.Keys).Order().Select(k =>
+        {
+            string? b = before.GetValueOrDefault(k);
+            string? a = after.GetValueOrDefault(k);
+            return b == a ? $"[{k}] same" : $"[{k}] BEFORE:\n{b}\n[{k}] AFTER:\n{a}";
+        }));
 }
