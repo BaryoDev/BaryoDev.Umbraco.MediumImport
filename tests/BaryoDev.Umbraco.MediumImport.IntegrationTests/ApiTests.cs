@@ -16,7 +16,7 @@ using Umbraco.Cms.Tests.Integration.ManagementApi;
 
 namespace BaryoDev.Umbraco.MediumImport.IntegrationTests;
 
-[UmbracoTest(Database = UmbracoTestOptions.Database.NewSchemaPerTest)]
+[UmbracoTest(Database = UmbracoTestOptions.Database.NewSchemaPerTest, Boot = true)]
 public abstract class ApiTestBase : ManagementApiTest<MediumImportController>
 {
     protected const string Base = "/umbraco/management/api/v1/medium-import/";

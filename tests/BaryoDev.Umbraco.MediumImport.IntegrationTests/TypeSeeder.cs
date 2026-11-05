@@ -38,7 +38,6 @@ public static class TypeSeeder
         return blog.Key;
     }
 
-
     private static IDataType DataType(IServiceProvider services, string editorAlias)
     {
         var editors = services.GetRequiredService<PropertyEditorCollection>();
