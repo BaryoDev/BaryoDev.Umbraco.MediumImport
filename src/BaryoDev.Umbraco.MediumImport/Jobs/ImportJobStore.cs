@@ -1,4 +1,6 @@
 using BaryoDev.Umbraco.MediumImport.Engine;
+using BaryoDev.Umbraco.MediumImport.Uploads;
+using Microsoft.Extensions.Logging;
 
 namespace BaryoDev.Umbraco.MediumImport.Jobs;
 
@@ -9,6 +11,14 @@ public sealed class ImportJobStore
 
     private readonly object _gate = new();
     private readonly List<ImportJob> _jobs = [];
+    private readonly UploadStore? _uploads;
+    private readonly ILogger<ImportJobStore>? _logger;
+
+    public ImportJobStore(UploadStore? uploads = null, ILogger<ImportJobStore>? logger = null)
+    {
+        _uploads = uploads;
+        _logger = logger;
+    }
 
     /// <summary>Queues a job, or returns null when one is already Queued or Running.</summary>
     public ImportJob? TryStart(ImportJobRequest request)
@@ -56,6 +66,7 @@ public sealed class ImportJobStore
             if (job.State == JobState.Queued)
             {
                 job.State = JobState.Cancelled;
+                _uploads?.Delete(job.Request.UploadId);
             }
 
             job.Cts.Cancel();
@@ -97,6 +108,7 @@ public sealed class ImportJobStore
         }
         catch (Exception ex)
         {
+            _logger?.LogError(ex, "Medium import job {JobId} failed", job.Id);
             job.Error = ex.Message;
             job.State = JobState.Failed;
         }

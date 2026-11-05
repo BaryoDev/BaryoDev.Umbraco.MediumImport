@@ -1,5 +1,7 @@
 using BaryoDev.Umbraco.MediumImport.Engine;
 using BaryoDev.Umbraco.MediumImport.Jobs;
+using BaryoDev.Umbraco.MediumImport.Uploads;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging.Abstractions;
 using Umbraco.Cms.Core;
 using Umbraco.Cms.Core.Services;
@@ -14,6 +16,31 @@ public class JobTests
     private static ImportJobRequest Request(params string[] ids) => new(Guid.NewGuid(), ids, Settings, 1);
 
     private static StoryResult Done(string id) => new(id, id, Outcome.Imported, null, Guid.NewGuid(), [], []);
+
+    [Fact]
+    public async Task Cancelling_a_queued_job_deletes_its_upload()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "mi-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var uploads = new UploadStore(root, Options.Create(new MediumImportOptions()));
+            Guid id = await uploads.SaveAsync(new MemoryStream([1, 2, 3]), TestContext.Current.CancellationToken);
+            Assert.True(File.Exists(uploads.PathOf(id)));
+            var store = new ImportJobStore(uploads);
+            ImportJob job = store.TryStart(new ImportJobRequest(id, ["a"], Settings, 1))!;
+
+            Assert.True(store.Cancel(job.Id));
+
+            Assert.False(File.Exists(uploads.PathOf(id)));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
 
     [Fact]
     public void Second_start_while_running_is_refused()
