@@ -73,15 +73,12 @@ public static class MediumExportReader
             long total = 0;
             foreach (ZipArchiveEntry entry in archive.Entries)
             {
-                if (IsHtml(entry.FullName))
-                {
-                    CheckName(entry.FullName);
-                }
-
                 if (!IsPost(entry.FullName))
                 {
                     continue;
                 }
+
+                CheckName(entry.FullName);
 
                 total += entry.Length;
                 if (total > limits.MaxTotalBytes)

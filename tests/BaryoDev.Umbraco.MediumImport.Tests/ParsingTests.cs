@@ -126,13 +126,33 @@ public class ParsingTests
 
     [Theory]
     [InlineData("posts/../../evil-0a1b2c3d4e5f.html")]
+    [InlineData("posts/a/../../x-0a1b2c3d4e5f.html")]
     [InlineData("/posts/evil-0a1b2c3d4e5f.html")]
     [InlineData("posts\\evil-0a1b2c3d4e5f.html")]
-    public void Reader_rejects_path_traversal_names(string name)
+    public void Reader_never_reads_traversal_names_as_posts(string name)
+    {
+        using MemoryStream zip = Zip((name, "<html></html>"), Post("2024-01-02"));
+
+        Assert.Equal("0a1b2c3d4e5f", MediumExportReader.Read(zip, Roomy).Single().PostId);
+    }
+
+    [Theory]
+    [InlineData("posts/a:b-0a1b2c3d4e5f.html")]
+    public void Reader_rejects_unsafe_names_inside_posts(string name)
     {
         using MemoryStream zip = Zip((name, "<html></html>"), Post("2024-01-02"));
 
         Assert.Throws<MediumExportException>(() => MediumExportReader.Read(zip, Roomy));
+    }
+
+    [Fact]
+    public void Reader_ignores_odd_names_outside_posts()
+    {
+        using MemoryStream zip = Zip(
+            Post("2024-01-02"),
+            ("lists/Reading-list-predefined:d15ca64e7255:READING_LIST.html", "<html></html>"));
+
+        Assert.Equal("0a1b2c3d4e5f", MediumExportReader.Read(zip, Roomy).Single().PostId);
     }
 
     [Fact]
