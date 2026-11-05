@@ -60,6 +60,7 @@ public sealed class MediumImportController(
     [ProducesResponseType<UploadResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status413PayloadTooLarge)]
+    [DisableFormValueModelBinding]
     public async Task<IActionResult> Upload(CancellationToken ct)
     {
         long cap = importOptions.Value.MaxUploadBytes;
@@ -83,6 +84,24 @@ public sealed class MediumImportController(
 
         try
         {
+            // If something read the form before this action, the body is gone. Use the parsed form instead.
+            if (HttpContext.Features.Get<IFormFeature>()?.Form is { } form)
+            {
+                IFormFile? posted = form.Files["file"] ?? form.Files.FirstOrDefault();
+                if (posted is null)
+                {
+                    return BadRequest(new ApiError("Send the zip as multipart form data in a field named file."));
+                }
+
+                if (posted.Length > cap)
+                {
+                    return TooLarge();
+                }
+
+                await using Stream stream = posted.OpenReadStream();
+                return Ok(new UploadResponse(await uploads.SaveAsync(stream, ct)));
+            }
+
             var reader = new MultipartReader(boundary, Request.Body);
             MultipartSection? section;
             while ((section = await reader.ReadNextSectionAsync(ct)) is not null)
