@@ -2,8 +2,12 @@ using System.Net.Http.Headers;
 using BaryoDev.Umbraco.MediumImport.Content;
 using BaryoDev.Umbraco.MediumImport.Engine;
 using BaryoDev.Umbraco.MediumImport.Identity;
+using BaryoDev.Umbraco.MediumImport.Jobs;
 using BaryoDev.Umbraco.MediumImport.Net;
+using BaryoDev.Umbraco.MediumImport.Settings;
+using BaryoDev.Umbraco.MediumImport.Uploads;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Umbraco.Cms.Core.Composing;
 using Umbraco.Cms.Core.DependencyInjection;
@@ -31,5 +35,12 @@ public sealed class MediumImportComposer : IComposer
         builder.Services.AddTransient<IMediaStore, UmbracoMediaStore>();
         builder.Services.AddTransient<MappingOptions>();
         builder.Services.AddTransient<MediumImportEngine>();
+        builder.Services.TryAddSingleton(TimeProvider.System);
+        builder.Services.AddSingleton<ImportJobStore>();
+        builder.Services.AddSingleton<UploadStore>();
+        builder.Services.AddSingleton<ImportJobUnit>();
+        builder.Services.AddSingleton<SettingsStore>();
+        builder.Services.AddHostedService<ImportJobRunner>();
+        builder.Services.AddHostedService<UploadCleanup>();
     }
 }
