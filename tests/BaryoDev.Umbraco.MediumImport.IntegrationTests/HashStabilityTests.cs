@@ -149,7 +149,7 @@ public class HashStabilityTests : ImportFixtureBase
         Assert.That(imported.Outcome, Is.EqualTo(Outcome.Imported), imported.Reason);
         IContent node = Content.GetById(imported.ContentKey!.Value)!;
         Assert.That(node.GetValue<string>("cover"), Does.Contain("mediaKey"), "the cover must be mapped for this test to mean anything");
-        Assert.That(node.GetValue("publishDate"), Is.Not.Null);
+        Assert.That(node.GetValue("publishDate"), Is.TypeOf<DateTime>(), "the date must use Date storage, as on a real site");
 
         PreviewStory preview = await PreviewAsync(settings);
 

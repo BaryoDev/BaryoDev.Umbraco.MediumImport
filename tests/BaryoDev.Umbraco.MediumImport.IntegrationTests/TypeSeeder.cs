@@ -42,7 +42,13 @@ public static class TypeSeeder
     {
         var editors = services.GetRequiredService<PropertyEditorCollection>();
         Assert.That(editors.TryGet(editorAlias, out IDataEditor? editor), Is.True, editorAlias);
-        var dt = new DataType(editor!, services.GetRequiredService<IConfigurationEditorJsonSerializer>()) { Name = "mi-" + editorAlias };
+        // IDataTypeService does not derive the storage type from the editor the way the backoffice does, so set it
+        // here. Without it a date is stored as text, unlike any real site.
+        var dt = new DataType(editor!, services.GetRequiredService<IConfigurationEditorJsonSerializer>())
+        {
+            Name = "mi-" + editorAlias,
+            DatabaseType = ValueTypes.ToStorageType(editor!.GetValueEditor().ValueType),
+        };
         var result = services.GetRequiredService<IDataTypeService>().CreateAsync(dt, Constants.Security.SuperUserKey).GetAwaiter().GetResult();
         Assert.That(result.Success, Is.True, editorAlias + " " + result.Status);
         return result.Result;
