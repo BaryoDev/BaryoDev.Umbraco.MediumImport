@@ -6,13 +6,18 @@ using System.Text;
 using System.Text.Json;
 using BaryoDev.Umbraco.MediumImport.Api;
 using BaryoDev.Umbraco.MediumImport.Engine;
+using BaryoDev.Umbraco.MediumImport.Identity;
 using BaryoDev.Umbraco.MediumImport.Jobs;
 using BaryoDev.Umbraco.MediumImport.Uploads;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
 using Umbraco.Cms.Core;
+using Umbraco.Cms.Core.Migrations;
+using Umbraco.Cms.Core.Packaging;
 using Umbraco.Cms.Core.Services;
+using Umbraco.Cms.Infrastructure.Install;
+using Umbraco.Cms.Infrastructure.Scoping;
 using Umbraco.Cms.Tests.Common.Testing;
 using Umbraco.Cms.Tests.Integration.ManagementApi;
 
@@ -43,6 +48,26 @@ public abstract class ApiTestBase : ManagementApiTest<MediumImportController>
 
     [SetUp]
     public void SeedTypes() => BlogKey = TypeSeeder.Seed(Services);
+
+    [SetUp]
+    public async Task RunPackageMigration()
+    {
+        var runner = Services.GetRequiredService<PackageMigrationRunner>();
+        await runner.RunPackageMigrationsIfPendingAsync("BaryoDev.Umbraco.MediumImport");
+        if (!TablesExist())
+        {
+            var executor = Services.GetRequiredService<IMigrationPlanExecutor>();
+            await executor.ExecutePlanAsync(new MediumImportMigrationPlan(), string.Empty);
+        }
+    }
+
+    private bool TablesExist()
+    {
+        using IScope scope = Services.GetRequiredService<IScopeProvider>().CreateScope(autoComplete: true);
+        var syntax = scope.Database.SqlContext.SqlSyntax;
+        return syntax.DoesTableExist(scope.Database, StoryKeyRow.TableName)
+            && syntax.DoesTableExist(scope.Database, MediaKeyRow.TableName);
+    }
 
     protected ImportSettings Settings() => new(BlogKey, "post", Mapping);
 
