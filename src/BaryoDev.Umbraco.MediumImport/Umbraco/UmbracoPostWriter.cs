@@ -1,7 +1,9 @@
 using System.Globalization;
+using System.Text.Json.Nodes;
 using BaryoDev.Umbraco.MediumImport.Engine;
 using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.PropertyEditors;
+using Umbraco.Cms.Core.Security;
 using Umbraco.Cms.Core.Serialization;
 using Umbraco.Cms.Core.Services;
 using Umbraco.Extensions;
@@ -17,14 +19,17 @@ public sealed class UmbracoPostWriter : IPostWriter
     private readonly PropertyEditorCollection _editors;
     private readonly IDataTypeService _dataTypes;
     private readonly IJsonSerializer _json;
+    private readonly IHtmlSanitizer _sanitizer;
 
     public UmbracoPostWriter(
-        IContentService content, PropertyEditorCollection editors, IDataTypeService dataTypes, IJsonSerializer json)
+        IContentService content, PropertyEditorCollection editors, IDataTypeService dataTypes, IJsonSerializer json,
+        IHtmlSanitizer sanitizer)
     {
         _content = content;
         _editors = editors;
         _dataTypes = dataTypes;
         _json = json;
+        _sanitizer = sanitizer;
     }
 
     public Guid? FindByOriginalUrl(ImportSettings settings, string url)
@@ -85,12 +90,38 @@ public sealed class UmbracoPostWriter : IPostWriter
             result[alias] = v switch
             {
                 null => null,
+                string raw when alias == m.Body && IsRichText(node, alias) => NormaliseRichText(raw),
                 DateTime d => d.ToString("o", CultureInfo.InvariantCulture),
                 _ => Convert.ToString(v, CultureInfo.InvariantCulture),
             };
         }
 
         return result;
+    }
+
+    private static bool IsRichText(IContent node, string alias) =>
+        node.Properties[alias]?.PropertyType.PropertyEditorAlias == "Umbraco.RichText";
+
+    // The importer stores raw markup. A backoffice save (RTE FromEditor) stores a {"markup","blocks"}
+    // envelope and runs the markup through the HTML sanitizer. Hash the sanitized markup either way.
+    private string NormaliseRichText(string raw)
+    {
+        string markup = raw;
+        if (raw.TrimStart().StartsWith('{'))
+        {
+            try
+            {
+                if (JsonNode.Parse(raw) is JsonObject obj && obj["markup"] is JsonValue m && m.TryGetValue(out string? text))
+                {
+                    markup = text;
+                }
+            }
+            catch (System.Text.Json.JsonException)
+            {
+            }
+        }
+
+        return _sanitizer.Sanitize(markup);
     }
 
     public Guid Write(ImportSettings settings, PostValues values, Guid? existing, int userId)
