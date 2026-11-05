@@ -14,4 +14,8 @@ public sealed record MediumStory(
     IReadOnlyList<string> GistIds,
     Uri? MediumUrl,
     bool IsDraft,
-    bool IsResponse);
+    bool IsResponse)
+{
+    /// <summary>Set when the file could not be read as a post (for example nested too deeply). The story must be reported as failed.</summary>
+    public string? ParseFailure { get; init; }
+}

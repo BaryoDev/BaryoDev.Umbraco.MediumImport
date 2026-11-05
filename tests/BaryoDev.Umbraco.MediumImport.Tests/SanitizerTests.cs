@@ -1,4 +1,5 @@
 using BaryoDev.Umbraco.MediumImport.Conversion;
+using BaryoDev.Umbraco.MediumImport.Parsing;
 
 namespace BaryoDev.Umbraco.MediumImport.Tests;
 
@@ -29,4 +30,14 @@ public class SanitizerTests
     [InlineData("<h1>t</h1>", "<h2>t</h2>")]
     public void Sanitize_ReturnsExactOutput(string input, string expected) =>
         Assert.Equal(expected, PostHtmlSanitizer.Sanitize(input));
+
+    [Fact]
+    public void Sanitize_refuses_a_too_deep_body_with_a_fixed_exception()
+    {
+        string html = string.Concat(Enumerable.Repeat("<div>", 100_000));
+
+        var ex = Assert.Throws<HtmlTooDeepException>(() => PostHtmlSanitizer.Sanitize(html));
+
+        Assert.Equal(HtmlTooDeepException.FixedMessage, ex.Message);
+    }
 }

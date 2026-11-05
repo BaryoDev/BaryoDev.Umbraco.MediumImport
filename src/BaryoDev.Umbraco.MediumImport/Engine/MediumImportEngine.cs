@@ -214,6 +214,11 @@ public sealed class MediumImportEngine
 
     private (StoryStatus Status, string? Reason, Guid? ContentKey, string? Hash) Classify(MediumStory story, ImportSettings s, StoryKeyRow? row)
     {
+        if (story.ParseFailure is not null)
+        {
+            return (StoryStatus.Filtered, story.ParseFailure, null, null);
+        }
+
         if (story.IsDraft)
         {
             return (StoryStatus.Draft, "Draft", null, null);
@@ -269,6 +274,11 @@ public sealed class MediumImportEngine
         CancellationToken ct)
     {
         string title = Title(story);
+        if (story.ParseFailure is not null)
+        {
+            return new StoryResult(story.PostId, title, Outcome.Failed, story.ParseFailure, null, [], [story.ParseFailure]);
+        }
+
         (StoryStatus status, string? reason, Guid? existing, _) = Classify(story, s, row);
         switch (status)
         {

@@ -225,4 +225,15 @@ public class ParsingTests
         Assert.Equal("Fallback", s.Title);
         Assert.Equal(["t1"], s.Tags);
     }
+
+    [Fact]
+    public void Parse_reports_a_too_deep_post_as_a_failure_instead_of_throwing()
+    {
+        string html = "<html><body><section data-field=\"body\">" + string.Concat(Enumerable.Repeat("<div>", 100_000)) + "</section></body></html>";
+
+        MediumStory story = MediumPostParser.Parse("2024-01-02_Deep-0a1b2c3d4e5f.html", html);
+
+        Assert.Equal(HtmlTooDeepException.FixedMessage, story.ParseFailure);
+        Assert.Equal("0a1b2c3d4e5f", story.PostId);
+    }
 }

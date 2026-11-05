@@ -14,11 +14,18 @@ public static class MediumPostParser
 
     public static MediumStory Parse(string fileName, string html)
     {
-        var doc = new HtmlDocument();
-        doc.LoadHtml(html);
-
         Match idMatch = IdPattern.Match(fileName);
         string postId = idMatch.Success ? idMatch.Groups[1].Value.ToLowerInvariant() : "";
+
+        HtmlDocument doc;
+        try
+        {
+            doc = SafeHtml.Load(html);
+        }
+        catch (HtmlTooDeepException ex)
+        {
+            return new MediumStory(postId, fileName, "", null, null, null, [], "", [], [], null, false, false) { ParseFailure = ex.Message };
+        }
 
         string? h1 = Text(Find(doc, "h1", "p-name"));
         string title = !string.IsNullOrWhiteSpace(h1) ? h1 : Text(doc.DocumentNode.SelectSingleNode("//title")) ?? "";

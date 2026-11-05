@@ -499,4 +499,24 @@ public class EngineTests
 
         Assert.Equal(5, preview.Stories.Count);
     }
+
+    [Fact]
+    public async Task Deeply_nested_body_fails_the_story_not_the_process()
+    {
+        const string deep = "bb11cc22dd33";
+        string nested = string.Concat(Enumerable.Repeat("<div>", 100_000));
+        string html = "<html><body><article class=\"h-entry\"><h1 class=\"p-name\">Deep</h1>"
+            + "<section data-field=\"body\" class=\"e-content\">" + nested + "<p>x</p></section></article></body></html>";
+        var rig = new Rig();
+        MemoryStream zip = Zip(Post("2024-01-02"), ("posts/2024-02-02_Deep-" + deep + ".html", html));
+        ImportSettings s = Settings();
+
+        ImportResult result = await rig.Engine().ImportAsync(zip, Ids(Code, deep), s, 1, null, CancellationToken.None);
+
+        StoryResult failed = result.Stories.Single(x => x.PostId == deep);
+        Assert.Equal(Outcome.Failed, failed.Outcome);
+        Assert.Equal(HtmlTooDeepException.FixedMessage, failed.Reason);
+        Assert.Equal(Outcome.Imported, result.Stories.Single(x => x.PostId == Code).Outcome);
+        Assert.Equal(1, rig.Writer.Creates);
+    }
 }

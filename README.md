@@ -19,6 +19,7 @@ Each claim below names the test that backs it. Test classes are under `tests/`.
 - A post whose node was deleted is created again. (`EngineTests.Deleted_node_created_again`)
 - A post that already exists with the same Medium URL in the mapped original URL field is adopted instead of duplicated. Without that field mapped there is no adoption. (`EngineTests.Adoption_by_original_url_writes_key_row`, `No_adoption_without_original_url_mapping`)
 - The same image URL is fetched once per run. (`EngineTests.Same_image_url_fetched_once_per_run`)
+- A post whose HTML nests deeper than 512 levels fails with a fixed reason. The rest of the export imports normally. (`EngineTests.Deeply_nested_body_fails_the_story_not_the_process`, `ParsingTests.Parse_reports_a_too_deep_post_as_a_failure_instead_of_throwing`, `SanitizerTests.Sanitize_refuses_a_too_deep_body_with_a_fixed_exception`)
 - Script, event handlers and `javascript:` URLs from the export do not reach the page. `class` is allowed on `code` only. (`SanitizerTests.Sanitize_ReturnsExactOutput`, `CodeBlockTests.Language_class_allowed_only_on_code`, `Resolved_image_with_javascript_url_is_dropped`)
 - Canonical URL: "This site" leaves the mapped canonical field empty. "Keep Medium" writes the Medium URL into it. (`EngineTests.Canonical_this_site_leaves_field_empty`, `Canonical_keep_medium_writes_url`)
 

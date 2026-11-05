@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using BaryoDev.Umbraco.MediumImport.Net;
+using BaryoDev.Umbraco.MediumImport.Parsing;
 using HtmlAgilityPack;
 
 namespace BaryoDev.Umbraco.MediumImport.Conversion;
@@ -35,8 +36,7 @@ public static class PostHtmlSanitizer
 
     public static string Sanitize(string html, SanitizeContext? context = null)
     {
-        var doc = new HtmlDocument();
-        doc.LoadHtml(html);
+        HtmlDocument doc = SafeHtml.Load(html);
         EmbedsToLinks(doc, context is not null);
         var sb = new StringBuilder();
         Walk(doc.DocumentNode, sb, context);

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using HtmlAgilityPack;
 using BaryoDev.Umbraco.MediumImport.Engine;
+using BaryoDev.Umbraco.MediumImport.Parsing;
 using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.PropertyEditors;
 using Umbraco.Cms.Core.Serialization;
@@ -123,8 +124,16 @@ public sealed class UmbracoPostWriter : IPostWriter
             return markup;
         }
 
-        var doc = new HtmlDocument();
-        doc.LoadHtml(markup);
+        HtmlDocument doc;
+        try
+        {
+            doc = SafeHtml.Load(markup);
+        }
+        catch (HtmlTooDeepException)
+        {
+            return markup;
+        }
+
         foreach (HtmlNode img in doc.DocumentNode.SelectNodes("//img[@data-udi]") ?? Enumerable.Empty<HtmlNode>())
         {
             if (!string.IsNullOrEmpty(img.GetAttributeValue("data-udi", "")))
