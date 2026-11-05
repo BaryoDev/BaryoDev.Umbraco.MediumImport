@@ -10,10 +10,12 @@ using Umbraco.Cms.Core.PropertyEditors;
 using Umbraco.Cms.Core.Serialization;
 using Umbraco.Cms.Core.Services;
 using Umbraco.Cms.Core.Strings;
+using Umbraco.Cms.Tests.Common.Testing;
 using Umbraco.Cms.Tests.Integration.Testing;
 
 namespace BaryoDev.Umbraco.MediumImport.IntegrationTests;
 
+[UmbracoTest(Database = UmbracoTestOptions.Database.NewSchemaPerTest)]
 public abstract class ImportFixtureBase : UmbracoIntegrationTest
 {
     protected static readonly FieldMapping FullMapping =

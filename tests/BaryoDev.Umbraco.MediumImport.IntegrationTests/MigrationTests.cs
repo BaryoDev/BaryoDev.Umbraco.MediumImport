@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using NUnit.Framework;
 using Umbraco.Cms.Core.DependencyInjection;
+using Umbraco.Cms.Core.Migrations;
 using Umbraco.Cms.Infrastructure.Install;
 using Umbraco.Cms.Infrastructure.Scoping;
 using Umbraco.Cms.Tests.Common.Testing;
@@ -27,9 +28,23 @@ public class MigrationTests : UmbracoIntegrationTest
     [SetUp]
     public async Task RunPackageMigration()
     {
-        // Idempotent: a no-op when the plan already ran at boot.
         var runner = Services.GetRequiredService<PackageMigrationRunner>();
         await runner.RunPackageMigrationsIfPendingAsync("BaryoDev.Umbraco.MediumImport");
+
+        // The runner skips when key-value state says the plan ran; run it directly if the tables are absent.
+        if (!TablesExist())
+        {
+            var executor = Services.GetRequiredService<IMigrationPlanExecutor>();
+            await executor.ExecutePlanAsync(new MediumImportMigrationPlan(), string.Empty);
+        }
+    }
+
+    private bool TablesExist()
+    {
+        using var scope = ScopeProvider.CreateScope(autoComplete: true);
+        var syntax = scope.Database.SqlContext.SqlSyntax;
+        return syntax.DoesTableExist(scope.Database, StoryKeyRow.TableName)
+            && syntax.DoesTableExist(scope.Database, MediaKeyRow.TableName);
     }
 
     [Test]
