@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Security.Cryptography;
 using System.Text;
 using Umbraco.Cms.Infrastructure.Scoping;
@@ -21,7 +22,15 @@ public sealed class MediaKeyRepository(IScopeProvider scopeProvider) : IMediaKey
         var existing = scope.Database.SingleOrDefault<MediaKeyRow>("WHERE SourceHash = @0", row.SourceHash);
         if (existing is null)
         {
-            scope.Database.Insert(row);
+            try
+            {
+                scope.Database.Insert(row);
+            }
+            catch (DbException)
+            {
+                // another writer inserted the same key first
+                scope.Database.Update(row);
+            }
         }
         else
         {

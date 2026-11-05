@@ -2,11 +2,15 @@
 
   <PropertyGroup>
     <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <EnableNUnitRunner>true</EnableNUnitRunner>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Umbraco.Cms.Tests.Integration" Version="17.*" />
+    <PackageReference Include="Umbraco.Cms.Tests.Integration" Version="17.8.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="5.*" />
   </ItemGroup>
 
   <ItemGroup>

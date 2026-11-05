@@ -1,6 +1,8 @@
 using BaryoDev.Umbraco.MediumImport.Identity;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using NUnit.Framework;
+using Umbraco.Cms.Core.DependencyInjection;
 using Umbraco.Cms.Infrastructure.Install;
 using Umbraco.Cms.Infrastructure.Scoping;
 using Umbraco.Cms.Tests.Common.Testing;
@@ -15,6 +17,12 @@ public class MigrationTests : UmbracoIntegrationTest
     private IStoryKeyRepository Stories => GetRequiredService<IStoryKeyRepository>();
 
     private IMediaKeyRepository Media => GetRequiredService<IMediaKeyRepository>();
+
+    protected override void CustomTestSetup(IUmbracoBuilder builder)
+    {
+        builder.Services.TryAddSingleton<IStoryKeyRepository, StoryKeyRepository>();
+        builder.Services.TryAddSingleton<IMediaKeyRepository, MediaKeyRepository>();
+    }
 
     [SetUp]
     public async Task RunPackageMigration()

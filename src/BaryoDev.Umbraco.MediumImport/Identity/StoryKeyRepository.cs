@@ -1,3 +1,4 @@
+using System.Data.Common;
 using Umbraco.Cms.Infrastructure.Scoping;
 
 namespace BaryoDev.Umbraco.MediumImport.Identity;
@@ -17,7 +18,15 @@ public sealed class StoryKeyRepository(IScopeProvider scopeProvider) : IStoryKey
         var existing = scope.Database.SingleOrDefault<StoryKeyRow>("WHERE PostId = @0", row.PostId);
         if (existing is null)
         {
-            scope.Database.Insert(row);
+            try
+            {
+                scope.Database.Insert(row);
+            }
+            catch (DbException)
+            {
+                // another writer inserted the same key first
+                scope.Database.Update(row);
+            }
         }
         else
         {
