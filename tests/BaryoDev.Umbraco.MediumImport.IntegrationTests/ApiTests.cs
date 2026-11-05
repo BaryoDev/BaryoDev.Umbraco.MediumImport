@@ -10,6 +10,7 @@ using BaryoDev.Umbraco.MediumImport.Jobs;
 using BaryoDev.Umbraco.MediumImport.Uploads;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Umbraco.Cms.Core.Services;
 using Umbraco.Cms.Tests.Common.Testing;
 using Umbraco.Cms.Tests.Integration.ManagementApi;
 
@@ -27,10 +28,18 @@ public abstract class ApiTestBase : ManagementApiTest<MediumImportController>
     protected static readonly FieldMapping Mapping =
         new("title", "body", null, null, null, null, null, null);
 
-    [SetUp]
-    public void SetCap() => InMemoryConfiguration["BaryoDev:MediumImport:MaxUploadBytes"] = "100000";
+    protected Guid BlogKey { get; private set; }
 
-    protected static ImportSettings Settings() => new(Guid.NewGuid(), "post", Mapping);
+    protected override void ConfigureTestServices(IServiceCollection services)
+    {
+        base.ConfigureTestServices(services);
+        services.PostConfigure<MediumImportOptions>(o => o.MaxUploadBytes = 100_000);
+    }
+
+    [SetUp]
+    public void SeedTypes() => BlogKey = TypeSeeder.Seed(Services);
+
+    protected ImportSettings Settings() => new(BlogKey, "post", Mapping);
 
     protected static byte[] ExportZip()
     {
@@ -124,6 +133,11 @@ public class ApiTests : ApiTestBase
         }
 
         Assert.That(state, Is.EqualTo("completed"), last);
+        JsonElement stories = JsonDocument.Parse(last).RootElement.GetProperty("result").GetProperty("stories");
+        Assert.That(stories.GetArrayLength(), Is.EqualTo(1), last);
+        Assert.That(stories[0].GetProperty("outcome").GetString(), Is.EqualTo("Imported").IgnoreCase, last);
+        var content = Services.GetRequiredService<IContentService>();
+        Assert.That(content.CountChildren(content.GetById(BlogKey)!.Id), Is.EqualTo(1));
     }
 
     [Test]

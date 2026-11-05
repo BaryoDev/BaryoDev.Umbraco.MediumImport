@@ -44,6 +44,15 @@ public sealed class ImportJobStore
         }
     }
 
+    /// <summary>True while a job is Queued or Running.</summary>
+    public bool HasActive()
+    {
+        lock (_gate)
+        {
+            return _jobs.Any(j => j.State is JobState.Queued or JobState.Running);
+        }
+    }
+
     public ImportJob? Get(Guid id)
     {
         lock (_gate)

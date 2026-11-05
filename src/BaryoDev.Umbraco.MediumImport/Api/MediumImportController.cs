@@ -162,6 +162,11 @@ public sealed class MediumImportController(
             return NotFound(new ApiError("upload"));
         }
 
+        if (jobs.HasActive())
+        {
+            return Conflict(new ApiError("running"));
+        }
+
         settings.Save(request.Settings);
         ImportJob? job = jobs.TryStart(new ImportJobRequest(request.UploadId, request.PostIds, request.Settings, userId));
         if (job is null)

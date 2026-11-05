@@ -3,6 +3,7 @@ using BaryoDev.Umbraco.MediumImport.Conversion;
 using BaryoDev.Umbraco.MediumImport.Identity;
 using BaryoDev.Umbraco.MediumImport.Net;
 using BaryoDev.Umbraco.MediumImport.Parsing;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace BaryoDev.Umbraco.MediumImport.Engine;
@@ -19,6 +20,7 @@ public sealed class MediumImportEngine
     private readonly IMediumSlugPolicy? _slugs;
     private readonly IReadOnlyList<IMediumImportCallback> _callbacks;
     private readonly MediumImportOptions _options;
+    private readonly ILogger<MediumImportEngine>? _logger;
 
     public MediumImportEngine(
         IStoryKeyRepository stories,
@@ -30,7 +32,8 @@ public sealed class MediumImportEngine
         IEnumerable<IMediumStoryFilter> filters,
         IEnumerable<IMediumSlugPolicy> slugs,
         IEnumerable<IMediumImportCallback> callbacks,
-        IOptions<MediumImportOptions> options)
+        IOptions<MediumImportOptions> options,
+        ILogger<MediumImportEngine>? logger = null)
     {
         _stories = stories;
         _media = media;
@@ -42,6 +45,7 @@ public sealed class MediumImportEngine
         _slugs = slugs.FirstOrDefault();
         _callbacks = callbacks.ToList();
         _options = options.Value;
+        _logger = logger;
     }
 
     public async Task<PreviewResult> PreviewAsync(Stream zip, ImportSettings s, CancellationToken ct)
@@ -94,6 +98,7 @@ public sealed class MediumImportEngine
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
+                _logger?.LogError(ex, "Story {PostId} failed to import", story.PostId);
                 result = new StoryResult(story.PostId, Title(story), Outcome.Failed, ex.Message, null, [], [ex.Message]);
             }
 
@@ -109,6 +114,7 @@ public sealed class MediumImportEngine
                 }
                 catch (Exception ex)
                 {
+                    _logger?.LogWarning(ex, "A callback failed for story {PostId}", story.PostId);
                     result = result with { Warnings = [.. result.Warnings, "A callback failed: " + ex.Message] };
                 }
             }
@@ -132,6 +138,7 @@ public sealed class MediumImportEngine
             }
             catch (Exception ex)
             {
+                _logger?.LogWarning(ex, "A callback failed on run completion");
                 warnings.Add("A callback failed: " + ex.Message);
             }
         }

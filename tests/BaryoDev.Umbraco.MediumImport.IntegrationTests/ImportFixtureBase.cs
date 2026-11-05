@@ -35,60 +35,8 @@ public abstract class ImportFixtureBase : UmbracoIntegrationTest
     }
 
     [SetUp]
-    public void SeedTypes()
-    {
-        var textBox = DataType("Umbraco.TextBox");
-        var textArea = DataType("Umbraco.TextArea");
-        var richText = DataType("Umbraco.RichText");
-        var date = DataType("Umbraco.DateTime");
-        var picker = DataType("Umbraco.MediaPicker3");
-        var tags = DataType("Umbraco.Tags");
-
-        CreateType("post", false, [], new (string, IDataType)[]
-        {
-            ("title", textBox), ("body", richText), ("publishDate", date), ("summary", textArea),
-            ("cover", picker), ("tags", tags), ("canonical", textBox), ("originalUrl", textBox),
-            ("headline", textBox), ("umbracoUrlName", textBox),
-        });
-        CreateType("bare", false, [], new (string, IDataType)[] { ("title", textBox), ("body", richText) });
-        CreateType("blog", true, ["post", "bare"], new (string, IDataType)[] { ("title", textBox) });
-
-        IContent blog = Content.Create("Blog", Constants.System.Root, "blog");
-        Content.Save(blog);
-        var published = Content.Publish(blog, ["*"]);
-        Assert.That(published.Success, Is.True, "publish blog: " + published.Result);
-        BlogKey = blog.Key;
-    }
+    public void SeedTypes() => BlogKey = TypeSeeder.Seed(Services);
 
     protected ImportSettings Settings(string docType = "post", bool publish = false, FieldMapping? mapping = null) =>
         new(BlogKey, docType, mapping ?? FullMapping, publish);
-
-    private IDataType DataType(string editorAlias)
-    {
-        var editors = GetRequiredService<PropertyEditorCollection>();
-        Assert.That(editors.TryGet(editorAlias, out IDataEditor? editor), Is.True, editorAlias);
-        var dt = new DataType(editor!, GetRequiredService<IConfigurationEditorJsonSerializer>()) { Name = "mi-" + editorAlias };
-        var result = GetRequiredService<IDataTypeService>().CreateAsync(dt, Constants.Security.SuperUserKey).GetAwaiter().GetResult();
-        Assert.That(result.Success, Is.True, editorAlias + " " + result.Status);
-        return result.Result;
-    }
-
-    private void CreateType(string alias, bool root, string[] allowed, (string Alias, IDataType Type)[] props)
-    {
-        var shortString = GetRequiredService<IShortStringHelper>();
-        var types = GetRequiredService<IContentTypeService>();
-        var ct = new ContentType(shortString, Constants.System.Root) { Alias = alias, Name = alias, AllowedAsRoot = root };
-        foreach (var (propAlias, dataType) in props)
-        {
-            ct.AddPropertyType(new PropertyType(shortString, dataType) { Alias = propAlias, Name = propAlias }, "Content", "Content");
-        }
-
-        int sort = 0;
-        ct.AllowedContentTypes = allowed
-            .Select(a => types.Get(a)!)
-            .Select(t => new ContentTypeSort(t.Key, sort++, t.Alias))
-            .ToList();
-        var result = types.CreateAsync(ct, Constants.Security.SuperUserKey).GetAwaiter().GetResult();
-        Assert.That(result.Success, Is.True, alias + " " + result.Result);
-    }
 }
