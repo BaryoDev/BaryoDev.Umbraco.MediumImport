@@ -10,6 +10,7 @@
     <RepositoryUrl>https://github.com/BaryoDev/BaryoDev.Umbraco.MediumImport</RepositoryUrl>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
     <StaticWebAssetBasePath>/</StaticWebAssetBasePath>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
@@ -21,6 +22,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="../../README.md" Pack="true" PackagePath="/" />
+    <None Include="../../icon.png" Pack="true" PackagePath="/" />
     <InternalsVisibleTo Include="BaryoDev.Umbraco.MediumImport.Tests" />
     <InternalsVisibleTo Include="BaryoDev.Umbraco.MediumImport.IntegrationTests" />
   </ItemGroup>

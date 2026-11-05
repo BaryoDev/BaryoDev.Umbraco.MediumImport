@@ -1,0 +1,22 @@
+{
+  "$schema": "https://marketplace.umbraco.com/umbraco-marketplace-schema.json",
+  "PackageType": "Package",
+  "Category": "Developer Tools",
+  "Description": "Import your Medium blog into Umbraco 17 from the Medium export zip. Pick the posts, the document type and the fields, then import from a Settings dashboard. Code blocks keep their exact text and language, gists are inlined as code blocks, and every image is copied into the media library. Running it again updates the posts it imported before and does not duplicate them. A post you edited after the import is skipped. Only the posts folder of the export is read. Free and MIT licensed.",
+  "AuthorDetails": {
+    "Name": "BaryoDev",
+    "Description": "Small open source .NET and JavaScript packages.",
+    "Url": "https://github.com/BaryoDev",
+    "ImageUrl": "https://raw.githubusercontent.com/BaryoDev/BaryoDev.Umbraco.MediumImport/main/icon.png"
+  },
+  "DocumentationUrl": "https://github.com/BaryoDev/BaryoDev.Umbraco.MediumImport#readme",
+  "IssueTrackerUrl": "https://github.com/BaryoDev/BaryoDev.Umbraco.MediumImport/issues",
+  "LicenseTypes": [ "Free" ],
+  "Tags": [
+    "medium",
+    "import",
+    "migration",
+    "blog",
+    "content migration"
+  ]
+}

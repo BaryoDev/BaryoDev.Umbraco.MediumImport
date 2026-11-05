@@ -1,0 +1,16 @@
+{
+  "size": 128,
+  "out": "icons",
+  "icons": [
+    {
+      "name": "mediumimport",
+      "bg": "#0b7a55",
+      "layers": [
+        {"fill": "white", "d": "M33 16h30a7 7 0 0 1 7 7v40a7 7 0 0 1 -7 7h-30a7 7 0 0 1 -7 -7v-40a7 7 0 0 1 7 -7z"},
+        {"fill": "#0b7a55", "d": "M36 28h24v8h-24z M36 44h16v8h-16z"},
+        {"fill": "white", "d": "M20 78h14v20h60v-20h14v26a8 8 0 0 1 -8 8h-72a8 8 0 0 1 -8 -8z"},
+        {"fill": "gold", "d": "M80 20h12v48h14l-20 24l-20 -24h14z"}
+      ]
+    }
+  ]
+}
