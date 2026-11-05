@@ -11,3 +11,6 @@ TestResults/
 appsettings-schema.json
 appsettings-schema.Umbraco.Cms.json
 umbraco-package-schema.json
+
+# Umbraco integration test scratch
+tests/*/TEMP/
