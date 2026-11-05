@@ -7,7 +7,7 @@ Each claim below names the test that backs it. Test classes are under `tests/`.
 ## What it does
 
 - Reads the posts in a Medium export zip and lists them with their title, date, image count, gist count and status. (`EngineTests.Preview_statuses_for_fixture_export`)
-- Drafts and responses are skipped. (`ParsingTests.Draft_and_response_are_flagged`)
+- Drafts and responses are marked as such in the preview and counted, so you can leave them out. (`EngineTests.Preview_statuses_for_fixture_export`)
 - Code blocks keep their exact text. `<br>` becomes a newline, the text is HTML-encoded, and the language Medium recorded becomes `class="language-x"`. A block with an unknown language gets no class. Adjacent blocks are not merged. (`CodeBlockTests.Br_becomes_newline_and_spans_drop`, `Text_is_encoded_never_copied`, `Unknown_language_gets_no_class`, `Adjacent_blocks_stay_separate`)
 - The language class survives a save through Umbraco's rich text editor. (`RichTextRoundTripTests.Language_class_and_newlines_survive_rte_save`)
 - Gists are fetched from GitHub and inlined as code blocks. If the fetch fails, the link stays and the post gets a warning. (`CodeBlockTests.Gist_alone_in_paragraph_is_replaced`, `EngineTests.Gist_failure_keeps_link_and_warns`)
@@ -43,16 +43,16 @@ Only users with access to the Settings section can use it. Other users get a 403
 6. Choose Save as draft (the default) or Publish, and the canonical mode (This site is the default).
 7. Click Import. The import runs as a background job and the dashboard polls it. (`ApiTests.Import_then_poll_until_completed`)
 8. A second import while one is running gets a 409. (`ApiTests.Second_import_gets_409`)
-9. Cancel stops the job between posts. (`JobTests.Cancel_stops_between_stories`)
+9. Cancel stops the import after the post being written. Posts already written stay, and a rerun shows them as already imported. (`EngineTests.Cancel_returns_partial_result_and_runs_completed`, `Cancel_after_first_post_then_rerun_shows_it_already_imported`)
 10. The result lists what was imported, updated, skipped and failed, with a reason for each. (`EngineTests.One_story_throwing_does_not_stop_the_run`)
 
 The settings you pick are saved and loaded next time. (`SettingsStoreTests.Settings_roundtrip`, `Settings_load_ignores_garbage`, `ApiTests.Settings_user_gets_204_when_nothing_is_saved`)
 
-The uploaded zip is stored outside `wwwroot` and deleted after the job ends or after `UploadTtl`. (`UploadTests.Upload_path_is_outside_wwwroot`, `Upload_roundtrips_and_deletes`, `Cleanup_deletes_only_old_files`)
+The uploaded zip is stored outside `wwwroot` and deleted if you cancel the job before it starts, and old uploads are cleaned up after `UploadTtl`. (`UploadTests.Upload_path_is_outside_wwwroot`, `JobTests.Cancelling_a_queued_job_deletes_its_upload`, `UploadTests.Cleanup_deletes_only_old_files`)
 
 ## Hooks
 
-Register your implementation in DI. They apply to every import, from the dashboard or from your own code.
+The snippets need `using BaryoDev.Umbraco.MediumImport.Engine;` and `using BaryoDev.Umbraco.MediumImport.Parsing;`. Register your implementation in DI. They apply to every import, from the dashboard or from your own code.
 
 Filter which stories may be imported. A rejected story shows in the preview as skipped, with your reason. (`EngineTests.Filter_reason_shows_in_preview`)
 
@@ -66,11 +66,13 @@ public sealed class OnlyTagged : IMediumStoryFilter
 builder.Services.AddSingleton<IMediumStoryFilter, OnlyTagged>();
 ```
 
-Choose the url segment. Return null to let Umbraco derive it from the name. If you register more than one, the first is used. (`EngineTests.Slug_policy_value_passed_as_url_segment`)
+Choose the url segment. Return null to let Umbraco derive it from the name. (`EngineTests.Slug_policy_value_passed_as_url_segment`)
 
 ```csharp
 public sealed class KeepOldSlugs : IMediumSlugPolicy
 {
+    private static readonly Dictionary<string, string> OldSlugs = new() { ["0a1b2c3d4e5f"] = "my-old-slug" };
+
     public string? SlugFor(MediumStory story) => OldSlugs.TryGetValue(story.PostId, out var s) ? s : null;
 }
 
@@ -124,7 +126,7 @@ Section `BaryoDev:MediumImport`. These are the defaults from `MediumImportOption
 
 ## What it reads
 
-Only `posts/*.html` inside the zip. Other folders in the export (profile, sessions, IPs, reading history and so on) are never opened. (`ParsingTests.Reader_opens_only_posts_html`) Entry names with path traversal are rejected. (`ParsingTests.Reader_rejects_path_traversal_names`)
+Only `posts/*.html` inside the zip. Other folders in the export (profile, sessions, IPs, reading history and so on) are ignored. (`ParsingTests.Reader_opens_only_posts_html`) Entry names with path traversal are rejected. (`ParsingTests.Reader_rejects_path_traversal_names`)
 
 ## Outbound requests
 
