@@ -8,6 +8,7 @@ using BaryoDev.Umbraco.MediumImport.Api;
 using BaryoDev.Umbraco.MediumImport.Engine;
 using BaryoDev.Umbraco.MediumImport.Jobs;
 using BaryoDev.Umbraco.MediumImport.Uploads;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
 using Umbraco.Cms.Core.Services;
@@ -29,6 +30,9 @@ public abstract class ApiTestBase : ManagementApiTest<MediumImportController>
         new("title", "body", null, null, null, null, null, null);
 
     protected Guid BlogKey { get; private set; }
+
+    protected override void CustomMvcSetup(IMvcBuilder mvcBuilder) =>
+        mvcBuilder.AddApplicationPart(typeof(MediumImportController).Assembly);
 
     protected override void ConfigureTestServices(IServiceCollection services)
     {
