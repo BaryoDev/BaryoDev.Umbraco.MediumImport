@@ -527,12 +527,15 @@ class MediumImportDashboard extends Base {
       return;
     }
     const groups = OUTCOME.map((name) => [name, r.stories.filter((s) => named(OUTCOME, s.outcome) === name)]);
-    const counts = groups.map(([name, list]) => `${list.length} ${name.toLowerCase()}`).join(", ");
+    const failuresOf = (s) => (s.failures ?? []).filter((f) => f !== s.reason);
+    const withFailures = r.stories.filter((s) => named(OUTCOME, s.outcome) !== "Failed" && failuresOf(s).length).length;
+    const counts = groups.map(([name, list]) => `${list.length} ${name.toLowerCase()}`).join(", ")
+      + (withFailures ? `, ${withFailures} with failures` : "");
     const body = groups.filter(([, list]) => list.length).map(([name, list]) => `
       <h4>${name}</h4>
       <table class="mi-table"><tbody>${list.map((s) => `
         <tr><td>${s.contentKey ? `<a href="/umbraco/section/content/workspace/document/edit/${esc(s.contentKey)}" target="_blank" rel="noopener">${esc(s.title)}</a>` : esc(s.title)}</td>
-        <td>${esc(s.reason ?? "")}${(s.warnings ?? []).map((w) => `<div class="mi-note">${esc(w)}</div>`).join("")}</td></tr>`).join("")}
+        <td>${esc(s.reason ?? "")}${failuresOf(s).map((f) => `<div class="mi-err">${esc(f)}</div>`).join("")}${(s.warnings ?? []).map((w) => `<div class="mi-note">${esc(w)}</div>`).join("")}</td></tr>`).join("")}
       </tbody></table>`).join("");
     const warnings = (r.warnings ?? []).map((w) => `<div class="mi-warn">${esc(w)}</div>`).join("");
     host.innerHTML = `<div class="mi-box"><h3>Result</h3><div class="mi-note">${esc(counts)}</div>${warnings}${body}</div>`;
