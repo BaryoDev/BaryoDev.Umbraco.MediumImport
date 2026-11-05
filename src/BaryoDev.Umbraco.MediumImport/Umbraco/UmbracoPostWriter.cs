@@ -157,6 +157,16 @@ public sealed class UmbracoPostWriter : IPostWriter
         node.SetValue(alias, value);
     }
 
-    private static string CoverJson(Guid mediaKey) =>
-        "[{\"key\":\"" + Guid.NewGuid() + "\",\"mediaKey\":\"" + mediaKey + "\",\"mediaTypeAlias\":\"\",\"crops\":[],\"focalPoint\":null}]";
+    private string CoverJson(Guid mediaKey) =>
+        _json.Serialize(new[]
+        {
+            new
+            {
+                key = Guid.NewGuid(),
+                mediaKey,
+                mediaTypeAlias = "Image",
+                crops = Array.Empty<object>(),
+                focalPoint = (object?)null,
+            },
+        });
 }

@@ -82,20 +82,48 @@ public class PostWriterTests : ImportFixtureBase
         Guid key = Writer.Write(Settings(), Values(tags: ["alpha", "beta"]), null, User);
 
         string raw = Content.GetById(key)!.GetValue<string>("tags")!;
-        string[] items = raw.TrimStart().StartsWith('[')
-            ? JsonSerializer.Deserialize<string[]>(raw)!
-            : raw.Split(',');
-        Assert.That(items, Is.EquivalentTo(new[] { "alpha", "beta" }));
+        Assert.That(JsonSerializer.Deserialize<string[]>(raw)!, Is.EquivalentTo(new[] { "alpha", "beta" }));
     }
 
     [Test]
     public void Tags_in_a_text_editor_are_comma_joined()
     {
         var mapping = FullMapping with { Tags = "summary", Summary = null };
+        var values = new PostValues(
+            "Text tags", null,
+            new Dictionary<string, object?> { ["title"] = "Text tags", ["body"] = "<p>x</p>", ["summary"] = new[] { "x", "y" } },
+            null);
 
-        Guid key = Writer.Write(Settings(mapping: mapping), Values(tags: ["x", "y"]), null, User);
+        Guid key = Writer.Write(Settings(mapping: mapping), values, null, User);
 
         Assert.That(Content.GetById(key)!.GetValue<string>("summary"), Is.EqualTo("x,y"));
+    }
+
+    [Test]
+    public void Slot_maps_to_a_property_with_a_different_alias()
+    {
+        var mapping = FullMapping with { Title = "headline" };
+        var values = new PostValues(
+            "Aliased", null,
+            new Dictionary<string, object?> { ["headline"] = "Aliased headline", ["body"] = "<p>x</p>" },
+            null);
+
+        Guid key = Writer.Write(Settings(mapping: mapping), values, null, User);
+
+        IContent node = Content.GetById(key)!;
+        Assert.That(node.GetValue<string>("headline"), Is.EqualTo("Aliased headline"));
+        Assert.That(node.GetValue<string>("title"), Is.Null);
+        Assert.That(Writer.ReadMapped(key, Settings(mapping: mapping))!["headline"], Is.EqualTo("Aliased headline"));
+    }
+
+    [Test]
+    public void Update_keeps_unpublished_node_unpublished_with_publish_true()
+    {
+        Guid key = Writer.Write(Settings(publish: false), Values(), null, User);
+
+        Writer.Write(Settings(publish: true), Values("Again"), key, User);
+
+        Assert.That(Content.GetById(key)!.Published, Is.False);
     }
 
     [Test]

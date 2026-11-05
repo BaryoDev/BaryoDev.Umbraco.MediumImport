@@ -8,6 +8,9 @@ public sealed record PostValues(
     IReadOnlyDictionary<string, object?> Values,
     Guid? CoverMediaKey);
 
+/// <remarks>
+/// Posts are created and found as direct children of the parent. A post moved deeper is out of scope.
+/// </remarks>
 public interface IPostWriter
 {
     /// <summary>Finds a post under the parent whose original url field equals the url.</summary>

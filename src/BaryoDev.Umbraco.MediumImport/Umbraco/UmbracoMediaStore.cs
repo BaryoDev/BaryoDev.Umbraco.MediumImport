@@ -20,6 +20,7 @@ public sealed class UmbracoMediaStore : IMediaStore
     private readonly MediaUrlGeneratorCollection _urlGenerators;
     private readonly IShortStringHelper _shortString;
     private readonly IContentTypeBaseServiceProvider _typeProvider;
+    private Guid? _rootKey;
 
     public UmbracoMediaStore(
         IMediaService media, MediaFileManager files, MediaUrlGeneratorCollection urlGenerators,
@@ -34,7 +35,7 @@ public sealed class UmbracoMediaStore : IMediaStore
 
     public ResolvedImage Save(string postFolder, FetchedImage image, int userId)
     {
-        IMedia root = FindRoot() ?? MakeFolder(RootFolderName, CoreConstants.System.Root, userId);
+        IMedia root = GetRoot(userId);
         IMedia folder = FindChild(root.Id, postFolder) ?? MakeFolder(postFolder, root.Id, userId);
 
         IMedia item = _media.CreateMedia(
@@ -53,6 +54,19 @@ public sealed class UmbracoMediaStore : IMediaStore
         IMedia? item = _media.GetById(mediaKey);
         string? url = item?.GetUrl(CoreConstants.Conventions.Media.File, _urlGenerators);
         return item is null || url is null ? null : new ResolvedImage(url, item.Key);
+    }
+
+    private IMedia GetRoot(int userId)
+    {
+        IMedia? cached = _rootKey is Guid key ? _media.GetById(key) : null;
+        if (cached is not null && !cached.Trashed)
+        {
+            return cached;
+        }
+
+        IMedia root = FindRoot() ?? MakeFolder(RootFolderName, CoreConstants.System.Root, userId);
+        _rootKey = root.Key;
+        return root;
     }
 
     private IMedia? FindRoot() =>
