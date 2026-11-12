@@ -52,17 +52,14 @@ public class ParsingTests
         Assert.False(s.IsResponse);
     }
 
-    [Theory]
-    [InlineData("https://evil.example/x")]
-    [InlineData("https://medium.com.evil.example/x")]
-    [InlineData("http://medium.com/x")]
-    public void Parse_ignores_a_canonical_link_that_is_not_medium_https(string url)
+    [Fact]
+    public void Parse_keeps_an_https_canonical_on_a_custom_domain()
     {
         (string name, string html) = Post("2024-01-02");
 
-        MediumStory s = MediumPostParser.Parse(name, html.Replace("https://medium.com/@someone/code-and-gists-0a1b2c3d4e5f", url));
+        MediumStory s = MediumPostParser.Parse(name, html.Replace("https://medium.com/@someone/code-and-gists-0a1b2c3d4e5f", "https://blog.example.com/code"));
 
-        Assert.Null(s.MediumUrl);
+        Assert.Equal(new Uri("https://blog.example.com/code"), s.MediumUrl);
     }
 
     [Fact]

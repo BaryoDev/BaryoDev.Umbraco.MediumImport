@@ -46,7 +46,7 @@ public static class MediumPostParser
 
         Uri? mediumUrl = null;
         string href = HtmlEntity.DeEntitize(Find(doc, "a", "p-canonical")?.GetAttributeValue("href", "") ?? "");
-        if (Uri.TryCreate(href, UriKind.Absolute, out Uri? c) && Net.MediumHosts.IsMediumHttps(c))
+        if (Uri.TryCreate(href, UriKind.Absolute, out Uri? c) && c.Scheme == Uri.UriSchemeHttps)
         {
             mediumUrl = c;
         }

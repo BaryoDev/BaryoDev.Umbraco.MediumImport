@@ -142,7 +142,7 @@ public class ApiTests : ApiTestBase
     }
 
     [Test]
-    public async Task Preview_and_import_reject_bad_settings_with_a_plain_400()
+    public async Task Import_rejects_bad_settings_with_a_plain_400_and_preview_only_a_null_mapping()
     {
         await AuthenticateWithSectionsAsync("badsettings", Constants.Applications.Settings);
         Guid uploadId = await UploadAsync(ExportZip());
@@ -155,18 +155,19 @@ public class ApiTests : ApiTestBase
         };
         foreach ((object settings, string contains) in cases)
         {
-            foreach ((string path, object payload) in new (string, object)[]
-            {
-                ("preview", new { uploadId, settings }),
-                ("import", new { uploadId, postIds = new[] { PostId }, settings }),
-            })
-            {
-                HttpResponseMessage response = await Client.PostAsJsonAsync(Base + path, payload);
-                string body = await response.Content.ReadAsStringAsync();
-                Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest), path + " " + body);
-                Assert.That(body, Does.Contain(contains).IgnoreCase, path + " " + body);
-            }
+            HttpResponseMessage response = await Client.PostAsJsonAsync(Base + "import", new { uploadId, postIds = new[] { PostId }, settings });
+            string body = await response.Content.ReadAsStringAsync();
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest), body);
+            Assert.That(body, Does.Contain(contains).IgnoreCase, body);
         }
+
+        // The dashboard previews before a parent and type are chosen, so that must still return the list.
+        HttpResponseMessage empty = await Client.PostAsJsonAsync(Base + "preview",
+            new { uploadId, settings = new { parentKey = Guid.Empty, docTypeAlias = "", mapping = new FieldMapping("", "", null, null, null, null, null, null) } });
+        Assert.That(empty.StatusCode, Is.EqualTo(HttpStatusCode.OK), await empty.Content.ReadAsStringAsync());
+        HttpResponseMessage nullMapping = await Client.PostAsJsonAsync(Base + "preview",
+            new { uploadId, settings = new { parentKey = BlogKey, docTypeAlias = "post", mapping = (FieldMapping?)null } });
+        Assert.That(nullMapping.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
 
         Assert.That((await Client.GetAsync(Base + "settings")).StatusCode, Is.EqualTo(HttpStatusCode.NoContent), "bad settings were saved");
     }

@@ -23,7 +23,7 @@ Each claim below names the test that backs it. Test classes are under `tests/`.
 - The same image URL is fetched once per run. (`EngineTests.Same_image_url_fetched_once_per_run`)
 - A post whose HTML nests deeper than 512 levels fails with a fixed reason. The rest of the export imports normally. (`EngineTests.Deeply_nested_body_fails_the_story_not_the_process`, `ParsingTests.Parse_reports_a_too_deep_post_as_a_failure_instead_of_throwing`, `SanitizerTests.Sanitize_refuses_a_too_deep_body_with_a_fixed_exception`)
 - Script, event handlers and `javascript:` URLs from the export do not reach the page. `class` is allowed on `code` only. (`SanitizerTests.Sanitize_ReturnsExactOutput`, `CodeBlockTests.Language_class_allowed_only_on_code`, `Resolved_image_with_javascript_url_is_dropped`)
-- Canonical URL: "This site" leaves the mapped canonical field empty. "Keep Medium" writes the Medium URL into it. (`EngineTests.Canonical_this_site_leaves_field_empty`, `Canonical_keep_medium_writes_url`)
+- Canonical URL: a custom-domain Medium publication keeps its https canonical link in these fields too; only medium.com links are matched against existing pages. "This site" leaves the mapped canonical field empty. "Keep Medium" writes the Medium URL into it. (`EngineTests.Canonical_this_site_leaves_field_empty`, `Canonical_keep_medium_writes_url`)
 
 ## Get the Medium export
 
@@ -37,7 +37,7 @@ dotnet add package BaryoDev.Umbraco.MediumImport
 
 ## Dashboard
 
-Only users with access to the Settings section can use it. Other users get a 403. (`ApiTests.Non_settings_user_gets_403`) That section check is the only gate on the import endpoint. It does not apply the user's start nodes, per-node permissions or publish rights, so give the Settings section only to people you would trust with those. Preview and import return a 400 with a plain reason when the parent does not exist, the document type does not exist or is not allowed under the parent, or the field mapping is missing. (`ApiTests.Preview_and_import_reject_bad_settings_with_a_plain_400`)
+Only users with access to the Settings section can use it. Other users get a 403. (`ApiTests.Non_settings_user_gets_403`) That section check is the only gate on the import endpoint. It does not apply the user's start nodes, per-node permissions or publish rights, so give the Settings section only to people you would trust with those. Import returns a 400 with a plain reason when the parent does not exist, the document type does not exist or is not allowed under the parent, or the field mapping is missing. Preview only refuses a missing mapping, so the post list shows before the parent and type are chosen. (`ApiTests.Import_rejects_bad_settings_with_a_plain_400_and_preview_only_a_null_mapping`)
 
 1. Open the Settings section and the "Medium import" dashboard.
 2. Upload the export zip. An upload over `MaxUploadBytes` gets a 413. (`ApiTests.Upload_over_cap_gets_413`)
