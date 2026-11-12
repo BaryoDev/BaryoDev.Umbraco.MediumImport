@@ -142,6 +142,36 @@ public class ApiTests : ApiTestBase
     }
 
     [Test]
+    public async Task Preview_and_import_reject_bad_settings_with_a_plain_400()
+    {
+        await AuthenticateWithSectionsAsync("badsettings", Constants.Applications.Settings);
+        Guid uploadId = await UploadAsync(ExportZip());
+        var cases = new (object Settings, string Contains)[]
+        {
+            (new { parentKey = Guid.NewGuid(), docTypeAlias = "post", mapping = Mapping }, "parent"),
+            (new { parentKey = BlogKey, docTypeAlias = "nope", mapping = Mapping }, "does not exist"),
+            (new { parentKey = BlogKey, docTypeAlias = "blog", mapping = Mapping }, "not allowed"),
+            (new { parentKey = BlogKey, docTypeAlias = "post", mapping = (FieldMapping?)null }, "mapping"),
+        };
+        foreach ((object settings, string contains) in cases)
+        {
+            foreach ((string path, object payload) in new (string, object)[]
+            {
+                ("preview", new { uploadId, settings }),
+                ("import", new { uploadId, postIds = new[] { PostId }, settings }),
+            })
+            {
+                HttpResponseMessage response = await Client.PostAsJsonAsync(Base + path, payload);
+                string body = await response.Content.ReadAsStringAsync();
+                Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest), path + " " + body);
+                Assert.That(body, Does.Contain(contains).IgnoreCase, path + " " + body);
+            }
+        }
+
+        Assert.That((await Client.GetAsync(Base + "settings")).StatusCode, Is.EqualTo(HttpStatusCode.NoContent), "bad settings were saved");
+    }
+
+    [Test]
     public async Task Import_then_poll_until_completed()
     {
         await AuthenticateWithSectionsAsync("importer", Constants.Applications.Settings);

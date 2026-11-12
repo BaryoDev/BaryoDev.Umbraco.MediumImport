@@ -57,9 +57,10 @@ public sealed class MediumImportEngine
     {
         IReadOnlyList<MediumStory> stories = await ReadAsync(zip, ct);
         var list = new List<PreviewStory>();
+        Func<string, Guid?> find = UrlFinder(s);
         foreach (MediumStory story in stories)
         {
-            (StoryStatus status, string? reason, Guid? key, _) = Classify(story, s, _stories.Get(story.PostId));
+            (StoryStatus status, string? reason, Guid? key, _) = Classify(story, s, _stories.Get(story.PostId), find);
             list.Add(new PreviewStory(story.PostId, Title(story), story.Published, story.Images.Count, story.GistIds.Count, status, reason, key));
         }
 
@@ -81,6 +82,7 @@ public sealed class MediumImportEngine
         var gistCache = new Dictionary<string, Gist?>(StringComparer.Ordinal);
         var imageCache = new Dictionary<Uri, ResolvedImage?>();
         var results = new List<StoryResult>();
+        Func<string, Guid?> find = UrlFinder(s);
         int done = 0;
         bool cancelled = false;
         foreach (MediumStory story in selected)
@@ -94,7 +96,7 @@ public sealed class MediumImportEngine
             StoryResult result;
             try
             {
-                result = await ImportOneAsync(story, s, userId, _stories.Get(story.PostId), gistCache, imageCache, ct);
+                result = await ImportOneAsync(story, s, userId, _stories.Get(story.PostId), gistCache, imageCache, find, ct);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -205,15 +207,29 @@ public sealed class MediumImportEngine
         return ms;
     }
 
-    private static bool IsMediumHttps(Uri? url) =>
-        url is { IsAbsoluteUri: true } && url.Scheme == Uri.UriSchemeHttps
-        && (url.Host.Equals("medium.com", StringComparison.OrdinalIgnoreCase)
-            || url.Host.EndsWith(".medium.com", StringComparison.OrdinalIgnoreCase));
+    /// <summary>Looks a post up by original url. The index of the parent's children is read once, on first use.</summary>
+    private Func<string, Guid?> UrlFinder(ImportSettings s)
+    {
+        IReadOnlyDictionary<string, Guid>? index = null;
+        bool built = false;
+        return url =>
+        {
+            if (!built)
+            {
+                index = _writer.IndexByOriginalUrl(s);
+                built = true;
+            }
+
+            return index is null
+                ? _writer.FindByOriginalUrl(s, url)
+                : index.TryGetValue(url, out Guid key) ? key : null;
+        };
+    }
 
     private static string Title(MediumStory story) =>
         string.IsNullOrWhiteSpace(story.Title) ? story.PostId : story.Title;
 
-    private (StoryStatus Status, string? Reason, Guid? ContentKey, string? Hash) Classify(MediumStory story, ImportSettings s, StoryKeyRow? row)
+    private (StoryStatus Status, string? Reason, Guid? ContentKey, string? Hash) Classify(MediumStory story, ImportSettings s, StoryKeyRow? row, Func<string, Guid?> find)
     {
         if (story.ParseFailure is not null)
         {
@@ -253,9 +269,9 @@ public sealed class MediumImportEngine
                 : (StoryStatus.EditedSinceImport, "Edited since import", row.ContentKey, current);
         }
 
-        if (s.Mapping.OriginalUrl is not null && IsMediumHttps(story.MediumUrl))
+        if (s.Mapping.OriginalUrl is not null && MediumHosts.IsMediumHttps(story.MediumUrl))
         {
-            Guid? found = _writer.FindByOriginalUrl(s, story.MediumUrl!.AbsoluteUri);
+            Guid? found = find(story.MediumUrl!.AbsoluteUri);
             if (found is not null)
             {
                 return (StoryStatus.AlreadyImported, "Found by original url", found, null);
@@ -292,6 +308,7 @@ public sealed class MediumImportEngine
         StoryKeyRow? row,
         Dictionary<string, Gist?> gistCache,
         Dictionary<Uri, ResolvedImage?> imageCache,
+        Func<string, Guid?> find,
         CancellationToken ct)
     {
         string title = Title(story);
@@ -300,7 +317,7 @@ public sealed class MediumImportEngine
             return new StoryResult(story.PostId, title, Outcome.Failed, story.ParseFailure, null, [], [story.ParseFailure]);
         }
 
-        (StoryStatus status, string? reason, Guid? existing, _) = Classify(story, s, row);
+        (StoryStatus status, string? reason, Guid? existing, _) = Classify(story, s, row, find);
         switch (status)
         {
             case StoryStatus.Draft or StoryStatus.Response or StoryStatus.Filtered:

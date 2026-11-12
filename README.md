@@ -37,7 +37,7 @@ dotnet add package BaryoDev.Umbraco.MediumImport
 
 ## Dashboard
 
-Only users with access to the Settings section can use it. Other users get a 403. (`ApiTests.Non_settings_user_gets_403`)
+Only users with access to the Settings section can use it. Other users get a 403. (`ApiTests.Non_settings_user_gets_403`) That section check is the only gate on the import endpoint. It does not apply the user's start nodes, per-node permissions or publish rights, so give the Settings section only to people you would trust with those. Preview and import return a 400 with a plain reason when the parent does not exist, the document type does not exist or is not allowed under the parent, or the field mapping is missing. (`ApiTests.Preview_and_import_reject_bad_settings_with_a_plain_400`)
 
 1. Open the Settings section and the "Medium import" dashboard.
 2. Upload the export zip. An upload over `MaxUploadBytes` gets a 413. (`ApiTests.Upload_over_cap_gets_413`)
@@ -111,7 +111,7 @@ Section `BaryoDev:MediumImport`. These are the defaults from `MediumImportOption
   "MediumImport": {
     "MaxUploadBytes": 104857600,
     "MaxEntryBytes": 20971520,
-    "MaxTotalBytes": 524288000,
+    "MaxTotalBytes": 104857600,
     "MaxEntries": 5000,
     "MaxImageBytes": 10485760,
     "MaxGistBytes": 1048576,
@@ -122,7 +122,7 @@ Section `BaryoDev:MediumImport`. These are the defaults from `MediumImportOption
 ```
 
 - `MaxUploadBytes`: largest zip you can upload (100 MB). (`SmokeTests.Options_defaults_match_spec`, `UploadTests.Upload_over_cap_throws_and_leaves_no_file`)
-- `MaxEntryBytes`, `MaxTotalBytes`, `MaxEntries`: caps on what is read from the zip (20 MB per entry, 500 MB in total, 5000 entries). (`ParsingTests.Reader_stops_at_the_entry_size_cap`, `Reader_stops_at_the_total_size_cap`, `Reader_stops_at_the_entry_count_cap`)
+- `MaxEntryBytes`, `MaxTotalBytes`, `MaxEntries`: caps on what is read from the zip (20 MB per entry, 100 MB in total, 5000 entries). (`ParsingTests.Reader_stops_at_the_entry_size_cap`, `Reader_stops_at_the_total_size_cap`, `Reader_stops_at_the_entry_count_cap`)
 - `MaxImageBytes`: largest image fetched (10 MB). (`NetTests.Fetch_refuses_oversize`)
 - `MaxGistBytes`: largest gist response read (1 MB). (`NetTests.Gist_oversize_returns_null`)
 - `HttpTimeoutSeconds`: timeout for each outbound request (30). (`NetTests.Slow_body_times_out_to_null`)

@@ -52,6 +52,19 @@ public class ParsingTests
         Assert.False(s.IsResponse);
     }
 
+    [Theory]
+    [InlineData("https://evil.example/x")]
+    [InlineData("https://medium.com.evil.example/x")]
+    [InlineData("http://medium.com/x")]
+    public void Parse_ignores_a_canonical_link_that_is_not_medium_https(string url)
+    {
+        (string name, string html) = Post("2024-01-02");
+
+        MediumStory s = MediumPostParser.Parse(name, html.Replace("https://medium.com/@someone/code-and-gists-0a1b2c3d4e5f", url));
+
+        Assert.Null(s.MediumUrl);
+    }
+
     [Fact]
     public void Parse_removes_title_and_subtitle_from_body()
     {

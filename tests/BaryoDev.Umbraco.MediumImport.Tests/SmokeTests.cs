@@ -8,6 +8,7 @@ public class SmokeTests
         var options = new MediumImportOptions();
 
         Assert.Equal(104857600, options.MaxUploadBytes);
+        Assert.Equal(104857600, options.MaxTotalBytes);
         Assert.Equal(TimeSpan.FromHours(1), options.UploadTtl);
     }
 }

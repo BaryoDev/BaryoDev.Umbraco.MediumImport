@@ -142,6 +142,11 @@ public sealed class MediumImportController(
             return BadRequest(new ApiError("Settings are required."));
         }
 
+        if (options.Validate(request.Settings) is { } problem)
+        {
+            return BadRequest(new ApiError(problem));
+        }
+
         if (!System.IO.File.Exists(uploads.PathOf(request.UploadId)))
         {
             return NotFound(new ApiError("upload"));
@@ -174,6 +179,11 @@ public sealed class MediumImportController(
         if (security.BackOfficeSecurity?.CurrentUser?.Id is not { } userId)
         {
             return Unauthorized();
+        }
+
+        if (options.Validate(request.Settings) is { } problem)
+        {
+            return BadRequest(new ApiError(problem));
         }
 
         if (!System.IO.File.Exists(uploads.PathOf(request.UploadId)))

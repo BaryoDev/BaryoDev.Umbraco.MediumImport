@@ -17,6 +17,12 @@ public interface IPostWriter
     Guid? FindByOriginalUrl(ImportSettings settings, string url);
 
     /// <summary>
+    /// Every post under the parent that has an original url, keyed by that url, read in one pass. Return null
+    /// to make the engine call <see cref="FindByOriginalUrl"/> per story instead.
+    /// </summary>
+    IReadOnlyDictionary<string, Guid>? IndexByOriginalUrl(ImportSettings settings) => null;
+
+    /// <summary>
     /// The mapped fields as strings, or null when the node is gone, not under settings.ParentKey,
     /// or not of settings.DocTypeAlias.
     /// </summary>
