@@ -53,6 +53,16 @@ public class ParsingTests
     }
 
     [Fact]
+    public void Parse_keeps_an_https_canonical_on_a_custom_domain()
+    {
+        (string name, string html) = Post("2024-01-02");
+
+        MediumStory s = MediumPostParser.Parse(name, html.Replace("https://medium.com/@someone/code-and-gists-0a1b2c3d4e5f", "https://blog.example.com/code"));
+
+        Assert.Equal(new Uri("https://blog.example.com/code"), s.MediumUrl);
+    }
+
+    [Fact]
     public void Parse_removes_title_and_subtitle_from_body()
     {
         MediumStory s = ParseFixture("2024-01-02");

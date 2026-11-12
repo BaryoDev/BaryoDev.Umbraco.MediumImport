@@ -6,7 +6,7 @@ public sealed class MediumImportOptions
 
     public long MaxUploadBytes { get; set; } = 100 * 1024 * 1024;
     public long MaxEntryBytes { get; set; } = 20 * 1024 * 1024;
-    public long MaxTotalBytes { get; set; } = 500 * 1024 * 1024;
+    public long MaxTotalBytes { get; set; } = 100 * 1024 * 1024;
     public int MaxEntries { get; set; } = 5000;
     public long MaxImageBytes { get; set; } = 10 * 1024 * 1024;
     public long MaxGistBytes { get; set; } = 1024 * 1024;

@@ -62,6 +62,38 @@ public sealed class UmbracoPostWriter : IPostWriter
         }
     }
 
+    public IReadOnlyDictionary<string, Guid>? IndexByOriginalUrl(ImportSettings settings)
+    {
+        string? alias = settings.Mapping.OriginalUrl;
+        IContent? parent = _content.GetById(settings.ParentKey);
+        var index = new Dictionary<string, Guid>(StringComparer.Ordinal);
+        if (alias is null || parent is null)
+        {
+            return index;
+        }
+
+        long page = 0;
+        while (true)
+        {
+            IContent[] children = _content.GetPagedChildren(parent.Id, page, PageSize, out long total, null, null, null, false).ToArray();
+            foreach (IContent child in children)
+            {
+                if (child.ContentType.Alias == settings.DocTypeAlias
+                    && child.HasProperty(alias)
+                    && child.GetValue<string>(alias) is { Length: > 0 } url)
+                {
+                    index.TryAdd(url, child.Key);
+                }
+            }
+
+            page++;
+            if (children.Length == 0 || page * PageSize >= total)
+            {
+                return index;
+            }
+        }
+    }
+
     public IReadOnlyDictionary<string, string?>? ReadMapped(Guid contentKey, ImportSettings settings)
     {
         IContent? node = _content.GetById(contentKey);

@@ -15,6 +15,7 @@ public sealed class FakePostWriter : IPostWriter
     public int Creates { get; private set; }
     public HashSet<Guid> OutOfScope { get; } = [];
     public int FindCalls { get; private set; }
+    public int IndexCalls { get; private set; }
     public int Writes { get; private set; }
     public Guid? LastExisting { get; private set; }
     public string? ThrowForName { get; set; }
@@ -23,6 +24,12 @@ public sealed class FakePostWriter : IPostWriter
     {
         FindCalls++;
         return ByOriginalUrl.TryGetValue(url, out Guid k) ? k : null;
+    }
+
+    public IReadOnlyDictionary<string, Guid>? IndexByOriginalUrl(ImportSettings s)
+    {
+        IndexCalls++;
+        return ByOriginalUrl;
     }
 
     public IReadOnlyDictionary<string, string?>? ReadMapped(Guid contentKey, ImportSettings settings)

@@ -142,6 +142,12 @@ public sealed class MediumImportController(
             return BadRequest(new ApiError("Settings are required."));
         }
 
+        // The dashboard previews before the parent and type are chosen, so only a null mapping is refused here.
+        if (request.Settings.Mapping is null)
+        {
+            return BadRequest(new ApiError("The field mapping is required."));
+        }
+
         if (!System.IO.File.Exists(uploads.PathOf(request.UploadId)))
         {
             return NotFound(new ApiError("upload"));
@@ -174,6 +180,11 @@ public sealed class MediumImportController(
         if (security.BackOfficeSecurity?.CurrentUser?.Id is not { } userId)
         {
             return Unauthorized();
+        }
+
+        if (options.Validate(request.Settings) is { } problem)
+        {
+            return BadRequest(new ApiError(problem));
         }
 
         if (!System.IO.File.Exists(uploads.PathOf(request.UploadId)))

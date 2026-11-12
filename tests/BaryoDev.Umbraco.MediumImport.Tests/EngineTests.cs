@@ -211,6 +211,18 @@ public class EngineTests
     }
 
     [Fact]
+    public async Task Original_urls_are_indexed_once_per_run_not_searched_per_story()
+    {
+        var rig = new Rig();
+
+        await rig.Engine().PreviewAsync(AllFixtures(), Settings(), CancellationToken.None);
+        await rig.Engine().ImportAsync(AllFixtures(), Ids(Code, Fast, Skills), Settings(), 1, null, CancellationToken.None);
+
+        Assert.Equal(2, rig.Writer.IndexCalls);
+        Assert.Equal(0, rig.Writer.FindCalls);
+    }
+
+    [Fact]
     public async Task No_adoption_without_original_url_mapping()
     {
         var rig = new Rig();

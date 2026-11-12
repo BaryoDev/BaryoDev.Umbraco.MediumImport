@@ -142,6 +142,37 @@ public class ApiTests : ApiTestBase
     }
 
     [Test]
+    public async Task Import_rejects_bad_settings_with_a_plain_400_and_preview_only_a_null_mapping()
+    {
+        await AuthenticateWithSectionsAsync("badsettings", Constants.Applications.Settings);
+        Guid uploadId = await UploadAsync(ExportZip());
+        var cases = new (object Settings, string Contains)[]
+        {
+            (new { parentKey = Guid.NewGuid(), docTypeAlias = "post", mapping = Mapping }, "parent"),
+            (new { parentKey = BlogKey, docTypeAlias = "nope", mapping = Mapping }, "does not exist"),
+            (new { parentKey = BlogKey, docTypeAlias = "blog", mapping = Mapping }, "not allowed"),
+            (new { parentKey = BlogKey, docTypeAlias = "post", mapping = (FieldMapping?)null }, "mapping"),
+        };
+        foreach ((object settings, string contains) in cases)
+        {
+            HttpResponseMessage response = await Client.PostAsJsonAsync(Base + "import", new { uploadId, postIds = new[] { PostId }, settings });
+            string body = await response.Content.ReadAsStringAsync();
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest), body);
+            Assert.That(body, Does.Contain(contains).IgnoreCase, body);
+        }
+
+        // The dashboard previews before a parent and type are chosen, so that must still return the list.
+        HttpResponseMessage empty = await Client.PostAsJsonAsync(Base + "preview",
+            new { uploadId, settings = new { parentKey = Guid.Empty, docTypeAlias = "", mapping = new FieldMapping("", "", null, null, null, null, null, null) } });
+        Assert.That(empty.StatusCode, Is.EqualTo(HttpStatusCode.OK), await empty.Content.ReadAsStringAsync());
+        HttpResponseMessage nullMapping = await Client.PostAsJsonAsync(Base + "preview",
+            new { uploadId, settings = new { parentKey = BlogKey, docTypeAlias = "post", mapping = (FieldMapping?)null } });
+        Assert.That(nullMapping.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+
+        Assert.That((await Client.GetAsync(Base + "settings")).StatusCode, Is.EqualTo(HttpStatusCode.NoContent), "bad settings were saved");
+    }
+
+    [Test]
     public async Task Import_then_poll_until_completed()
     {
         await AuthenticateWithSectionsAsync("importer", Constants.Applications.Settings);

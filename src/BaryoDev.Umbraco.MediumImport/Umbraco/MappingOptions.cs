@@ -1,3 +1,4 @@
+using BaryoDev.Umbraco.MediumImport.Engine;
 using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Services;
 
@@ -22,6 +23,45 @@ public sealed class MappingOptions
     {
         _content = content;
         _types = types;
+    }
+
+    /// <summary>
+    /// A plain reason when the settings cannot be used, or null when they are fine. Checks the mapping, the parent,
+    /// that the document type exists and that it is allowed under the parent.
+    /// </summary>
+    public string? Validate(ImportSettings? settings)
+    {
+        if (settings is null)
+        {
+            return "Settings are required.";
+        }
+
+        if (settings.Mapping is null)
+        {
+            return "The field mapping is required.";
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.Mapping.Title) || string.IsNullOrWhiteSpace(settings.Mapping.Body))
+        {
+            return "Map a title field and a body field.";
+        }
+
+        if (_content.GetById(settings.ParentKey) is null)
+        {
+            return "The parent page does not exist.";
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.DocTypeAlias) || _types.Get(settings.DocTypeAlias) is null)
+        {
+            return $"The document type '{settings.DocTypeAlias}' does not exist.";
+        }
+
+        if (!For(settings.ParentKey).Any(o => o.Alias == settings.DocTypeAlias))
+        {
+            return $"The document type '{settings.DocTypeAlias}' is not allowed under the parent page.";
+        }
+
+        return null;
     }
 
     public IReadOnlyList<DocTypeOption> For(Guid parentKey)
