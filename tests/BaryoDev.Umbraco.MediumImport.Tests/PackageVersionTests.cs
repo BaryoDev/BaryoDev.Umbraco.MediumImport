@@ -34,13 +34,21 @@ public class PackageVersionTests
         Assert.All(elements, element => Assert.EndsWith($".js?v={version}", element));
     }
 
+    private static string Script() => File.ReadAllText(Path.Combine(Root(), "src", "BaryoDev.Umbraco.MediumImport",
+        "wwwroot", "App_Plugins", "BaryoDev.MediumImport", "medium-import-dashboard.js"));
+
     [Fact]
     public void Dashboard_loads_the_stylesheet_with_the_script_version_query()
     {
-        var script = File.ReadAllText(Path.Combine(Root(), "src", "BaryoDev.Umbraco.MediumImport",
-            "wwwroot", "App_Plugins", "BaryoDev.MediumImport", "medium-import-dashboard.js"));
+        var script = Script();
 
         Assert.Contains("const V = new URL(import.meta.url).search;", script);
         Assert.Contains("dashboard.css${V}", script);
+    }
+
+    [Fact]
+    public void Dashboard_does_not_load_the_removed_brand_stylesheet()
+    {
+        Assert.DoesNotContain("brand.css", Script());
     }
 }
