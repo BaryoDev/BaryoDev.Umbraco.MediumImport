@@ -424,8 +424,9 @@ class MediumImportDashboard extends Base {
   #refreshControls() {
     const n = this.#selectedIds().length;
     const button = this.querySelector("#mi-import");
-    button.textContent = `Import ${n} posts`;
-    button.setAttribute("label", `Import ${n} posts`);
+    const text = `Import ${count(n, "post")}`;
+    button.textContent = text;
+    button.setAttribute("label", text);
     button.disabled = this.#running || this.#busy || n === 0 || !this.#complete() || !this.#uploadId;
     this.querySelector("#mi-cancel").hidden = !this.#running;
     this.querySelector("#mi-progress").hidden = !this.#running && !this.#job;
