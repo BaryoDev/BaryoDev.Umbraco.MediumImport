@@ -33,11 +33,19 @@ function esc(value) {
   return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 }
 
-// uui-select takes its options as a property. Setting .value as well keeps it readable before the element updates.
+// uui-select reuses option elements and only writes the native value when it changes,
+// so the native select is synced after render. Setting .value keeps it readable at once.
 function setOptions(select, list, want = "") {
-  const has = list.some((o) => o.value === want);
-  select.options = list.map((o) => ({ ...o, selected: has && o.value === want }));
-  select.value = has ? want : "";
+  const pick = list.some((o) => o.value === want) ? want : "";
+  select.placeholder = list.find((o) => o.value === "")?.name ?? "";
+  select.options = list.map((o) => ({ ...o, selected: o.value === pick }));
+  select.value = pick;
+  select.updateComplete.then(() => {
+    const native = select.shadowRoot?.querySelector("#native");
+    if (!native) return;
+    const i = [...native.options].findIndex((o, n) => n > 0 && o.value === pick);
+    if (i > 0) native.selectedIndex = i;
+  });
 }
 
 const named = (list, v) => (typeof v === "number" ? list[v] : v);
