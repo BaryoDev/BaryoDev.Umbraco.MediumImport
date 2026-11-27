@@ -2,6 +2,8 @@
 // The base comes from the backoffice's own UmbElementMixin so the auth context is reachable.
 const API = "/umbraco/management/api/v1/medium-import";
 const BASE = "/App_Plugins/BaryoDev.MediumImport";
+const V = new URL(import.meta.url).search;
+const LOGO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 134 32" role="img" aria-label="baryo.dev"><rect x="0" y="0" width="32" height="32" rx="8" fill="#0b7a55"/><path d="M9 8v16h7a5 5 0 0 0 0-10h-3" fill="none" stroke="#fbf7ee" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="24" cy="9" r="2.4" fill="#ffcd3c"/><text x="40" y="22" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-size="18" font-weight="700" fill="currentColor">baryo.dev</text></svg>`;
 const STOPPED = "The import stopped when the site restarted. Run it again; posts already imported are kept.";
 
 const Base = await import("@umbraco-cms/backoffice/element-api")
@@ -29,6 +31,13 @@ function count(n, word) {
 
 function esc(value) {
   return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+}
+
+// uui-select takes its options as a property. Setting .value as well keeps it readable before the element updates.
+function setOptions(select, list, want = "") {
+  const has = list.some((o) => o.value === want);
+  select.options = list.map((o) => ({ ...o, selected: has && o.value === want }));
+  select.value = has ? want : "";
 }
 
 const named = (list, v) => (typeof v === "number" ? list[v] : v);
@@ -121,6 +130,7 @@ class MediumImportDashboard extends Base {
     const hasPicker = await pickerReady();
     if (this.#disconnected) return;
     this.innerHTML = this.#shell(hasPicker);
+    this.#initOptions();
     this.querySelector("#mi-file").addEventListener("change", () => this.#upload());
     const parent = this.querySelector("#mi-parent");
     parent.addEventListener("change", () => this.#onParent());
@@ -135,7 +145,7 @@ class MediumImportDashboard extends Base {
     this.querySelector("#mi-import").addEventListener("click", () => this.#start());
     this.querySelector("#mi-cancel").addEventListener("click", () => this.#cancel());
     this.querySelector("#mi-list").addEventListener("change", (e) => {
-      const box = e.target.closest("input[data-post]");
+      const box = e.target.closest("uui-checkbox[data-post]");
       if (box) {
         this.#checked.set(box.dataset.post, box.checked);
         this.#refreshControls();
@@ -151,54 +161,60 @@ class MediumImportDashboard extends Base {
     clearTimeout(this.#previewTimer);
   }
 
+  #initOptions() {
+    setOptions(this.querySelector("#mi-type"), [{ name: "Pick a parent first", value: "" }]);
+    setOptions(this.querySelector("#mi-publish"), [{ name: "Save as draft", value: "no" }, { name: "Yes", value: "yes" }], "no");
+    setOptions(this.querySelector("#mi-canonical"), [{ name: "This site", value: "ThisSite" }, { name: "Keep Medium", value: "KeepMedium" }], "ThisSite");
+    for (const [key, , required] of SLOTS) {
+      setOptions(this.querySelector(`#mi-slot-${key}`), [{ name: required ? "Choose a property" : "None", value: "" }]);
+    }
+  }
+
   #shell(hasPicker) {
     return `
-      <link rel="stylesheet" href="${BASE}/brand.css">
+      <link rel="stylesheet" href="${BASE}/dashboard.css${V}">
       <div class="mi">
-        <div class="mi-head"><img src="${BASE}/logo.svg" alt="baryo.dev"><span>Medium import</span></div>
+        <div class="mi-head">${LOGO}<h1 class="mi-title">Medium import</h1></div>
         <div id="mi-banner"></div>
         <div class="mi-grid">
-          <div>
-            <div class="mi-box">
-              <h3>Upload</h3>
-              <div class="mi-row"><label for="mi-file">Medium export zip</label>
-                <input type="file" id="mi-file" accept=".zip,application/zip"></div>
+          <div class="mi-col">
+            <uui-box headline="Upload">
+              <div class="mi-row"><label class="mi-label" for="mi-file">Medium export zip</label>
+                <input type="file" class="mi-file" id="mi-file" accept=".zip,application/zip"></div>
               <div class="mi-note">Export it from Medium under Settings, Security and apps, Download your information.</div>
-            </div>
-            <div class="mi-box" id="mi-posts" hidden>
-              <h3>Posts</h3>
+            </uui-box>
+            <uui-box headline="Posts" id="mi-posts" hidden>
               <div class="mi-note" id="mi-skipped"></div>
               <div id="mi-list"></div>
-            </div>
+            </uui-box>
           </div>
-          <div>
-            <div class="mi-box">
-              <h3>Settings</h3>
-              <div class="mi-row"><label>Parent page</label>
-                ${hasPicker ? `<umb-input-document id="mi-parent" max="1"></umb-input-document>` : `<input id="mi-parent" placeholder="Parent key (GUID)" style="padding:6px;font:inherit">`}</div>
-              <div class="mi-row"><label for="mi-type">Document type</label>
-                <select id="mi-type" disabled><option value="">Pick a parent first</option></select></div>
+          <div class="mi-col">
+            <uui-box headline="Settings">
+              <div class="mi-row"><span class="mi-label">Parent page</span>
+                ${hasPicker ? `<umb-input-document id="mi-parent" max="1"></umb-input-document>` : `<uui-input id="mi-parent" label="Parent page" placeholder="Parent key (GUID)"></uui-input>`}</div>
+              <div class="mi-row"><span class="mi-label">Document type</span>
+                <uui-select id="mi-type" label="Document type" disabled></uui-select></div>
               ${SLOTS.map(([key, label, required]) => `
-              <div class="mi-row"><label for="mi-slot-${key}">${label}${required ? " (required)" : ""}</label>
-                <select id="mi-slot-${key}" disabled></select></div>`).join("")}
-              <div class="mi-row"><label for="mi-publish">Publish</label>
-                <select id="mi-publish"><option value="no" selected>Save as draft</option><option value="yes">Yes</option></select></div>
-              <div class="mi-row"><label for="mi-canonical">Canonical</label>
-                <select id="mi-canonical"><option value="ThisSite" selected>This site</option><option value="KeepMedium">Keep Medium</option></select></div>
-            </div>
-            <div class="mi-box">
+              <div class="mi-row"><span class="mi-label">${label}${required ? " (required)" : ""}</span>
+                <uui-select id="mi-slot-${key}" label="${label}${required ? " (required)" : ""}" disabled></uui-select></div>`).join("")}
+              <div class="mi-row"><span class="mi-label">Publish</span>
+                <uui-select id="mi-publish" label="Publish"></uui-select></div>
+              <div class="mi-row"><span class="mi-label">Canonical</span>
+                <uui-select id="mi-canonical" label="Canonical"></uui-select></div>
+            </uui-box>
+            <uui-box headline="Import">
               <div class="mi-actions">
-                <button class="mi-btn primary" id="mi-import" disabled>Import 0 posts</button>
-                <button class="mi-btn" id="mi-cancel" hidden>Cancel</button>
+                <uui-button look="primary" color="positive" id="mi-import" label="Import 0 posts" disabled>Import 0 posts</uui-button>
+                <uui-button look="secondary" id="mi-cancel" label="Cancel" hidden>Cancel</uui-button>
               </div>
               <div id="mi-progress" hidden>
-                <div class="mi-bar"><div id="mi-fill" style="width:0"></div></div>
+                <uui-progress-bar id="mi-bar" role="progressbar" aria-label="Import progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" progress="0"></uui-progress-bar>
                 <div class="mi-note" id="mi-status"></div>
               </div>
-            </div>
+            </uui-box>
           </div>
         </div>
-        <div id="mi-result"></div>
+        <div id="mi-result" class="mi-result"></div>
       </div>`;
   }
 
@@ -234,8 +250,10 @@ class MediumImportDashboard extends Base {
       const s = await call(this, "/settings");
       if (!s) return;
       this.#saved = s;
-      this.querySelector("#mi-publish").value = s.publish ? "yes" : "no";
-      this.querySelector("#mi-canonical").value = s.canonical || "ThisSite";
+      const publish = this.querySelector("#mi-publish");
+      const canonical = this.querySelector("#mi-canonical");
+      setOptions(publish, publish.options, s.publish ? "yes" : "no");
+      setOptions(canonical, canonical.options, s.canonical || "ThisSite");
       const parent = this.querySelector("#mi-parent");
       if (s.parentKey && s.parentKey !== "00000000-0000-0000-0000-000000000000") {
         if ("selection" in parent || parent.tagName.toLowerCase() === "umb-input-document") parent.selection = [s.parentKey];
@@ -252,7 +270,7 @@ class MediumImportDashboard extends Base {
     const type = this.querySelector("#mi-type");
     this.#options = [];
     if (!key) {
-      type.innerHTML = `<option value="">Pick a parent first</option>`;
+      setOptions(type, [{ name: "Pick a parent first", value: "" }]);
       type.disabled = true;
       this.#fillSlots();
       this.#refreshControls();
@@ -265,11 +283,10 @@ class MediumImportDashboard extends Base {
       return;
     }
     const want = type.value || this.#saved?.docTypeAlias || "";
-    type.innerHTML = this.#options.length
-      ? `<option value="">Choose a document type</option>` + this.#options.map((o) => `<option value="${esc(o.alias)}">${esc(o.name)}</option>`).join("")
-      : `<option value="">No document types are allowed here</option>`;
+    setOptions(type, this.#options.length
+      ? [{ name: "Choose a document type", value: "" }, ...this.#options.map((o) => ({ name: o.name, value: o.alias }))]
+      : [{ name: "No document types are allowed here", value: "" }], want);
     type.disabled = !this.#options.length;
-    if (this.#options.some((o) => o.alias === want)) type.value = want;
     this.#fillSlots();
     this.#onSettings();
   }
@@ -286,10 +303,8 @@ class MediumImportDashboard extends Base {
       const select = this.querySelector(`#mi-slot-${key}`);
       const keep = select.value || (alias === this.#saved?.docTypeAlias ? this.#saved?.mapping?.[key] : "") || "";
       const props = option?.slots?.[key] ?? [];
-      select.innerHTML = (required ? `<option value="">Choose a property</option>` : `<option value="">None</option>`)
-        + props.map((p) => `<option value="${esc(p.alias)}">${esc(p.name)}</option>`).join("");
+      setOptions(select, [{ name: required ? "Choose a property" : "None", value: "" }, ...props.map((p) => ({ name: p.name, value: p.alias }))], keep);
       select.disabled = !option;
-      if (props.some((p) => p.alias === keep)) select.value = keep;
     }
   }
 
@@ -380,19 +395,18 @@ class MediumImportDashboard extends Base {
       const status = named(STATUS, s.status);
       const off = this.#disabledStory(s);
       const date = s.published ? new Date(s.published).toLocaleDateString() : "";
-      const tag = status === "New" ? "" : status === "AlreadyImported" ? "warn" : "bad";
-      return `<tr class="${off ? "off" : ""}">
-        <td><input type="checkbox" data-post="${esc(s.postId)}" ${this.#isChecked(s) ? "checked" : ""} ${off || this.#running ? "disabled" : ""} aria-label="Import ${esc(s.title)}"></td>
-        <td>${esc(s.title)}${off && s.reason ? `<div class="mi-note">${esc(s.reason)}</div>` : ""}</td>
-        <td>${esc(date)}</td>
-        <td>${s.imageCount}</td>
-        <td>${s.gistCount}</td>
-        <td><span class="mi-tag ${tag}">${esc(STATUS_TEXT[status] ?? status)}</span>${!off && s.reason ? `<div class="mi-note">${esc(s.reason)}</div>` : ""}</td>
-      </tr>`;
+      const tag = status === "New" ? `look="secondary"` : status === "AlreadyImported" ? `look="primary" color="warning"` : `look="primary" color="danger"`;
+      return `<uui-table-row>
+        <uui-table-cell><uui-checkbox data-post="${esc(s.postId)}" label="Import ${esc(s.title)}" ${this.#isChecked(s) ? "checked" : ""} ${off || this.#running ? "disabled" : ""}><span class="${off ? "mi-off" : ""}">${esc(s.title)}</span></uui-checkbox>${off && s.reason ? `<div class="mi-note">${esc(s.reason)}</div>` : ""}</uui-table-cell>
+        <uui-table-cell>${esc(date)}</uui-table-cell>
+        <uui-table-cell>${esc(s.imageCount)}</uui-table-cell>
+        <uui-table-cell>${esc(s.gistCount)}</uui-table-cell>
+        <uui-table-cell><uui-tag ${tag}>${esc(STATUS_TEXT[status] ?? status)}</uui-tag>${!off && s.reason ? `<div class="mi-note">${esc(s.reason)}</div>` : ""}</uui-table-cell>
+      </uui-table-row>`;
     }).join("");
     this.querySelector("#mi-list").innerHTML = `
-      <table class="mi-table"><thead><tr><th></th><th>Title</th><th>Date</th><th>Images</th><th>Gists</th><th>Status</th></tr></thead>
-      <tbody>${rows}</tbody></table>`;
+      <div class="mi-scroll"><uui-table><uui-table-head><uui-table-head-cell>Title</uui-table-head-cell><uui-table-head-cell>Date</uui-table-head-cell><uui-table-head-cell>Images</uui-table-head-cell><uui-table-head-cell>Gists</uui-table-head-cell><uui-table-head-cell>Status</uui-table-head-cell></uui-table-head>
+      ${rows}</uui-table></div>`;
   }
 
   #selectedIds() {
@@ -403,10 +417,11 @@ class MediumImportDashboard extends Base {
     const n = this.#selectedIds().length;
     const button = this.querySelector("#mi-import");
     button.textContent = `Import ${n} posts`;
+    button.setAttribute("label", `Import ${n} posts`);
     button.disabled = this.#running || this.#busy || n === 0 || !this.#complete() || !this.#uploadId;
     this.querySelector("#mi-cancel").hidden = !this.#running;
     this.querySelector("#mi-progress").hidden = !this.#running && !this.#job;
-    for (const box of this.querySelectorAll("#mi-list input[data-post]")) {
+    for (const box of this.querySelectorAll("#mi-list uui-checkbox[data-post]")) {
       const s = this.#preview?.stories?.find((x) => x.postId === box.dataset.post);
       box.disabled = this.#running || !s || this.#disabledStory(s);
     }
@@ -497,7 +512,9 @@ class MediumImportDashboard extends Base {
     const j = this.#job;
     if (!j) return;
     const pct = j.total ? Math.round((j.done / j.total) * 100) : 0;
-    this.querySelector("#mi-fill").style.width = `${pct}%`;
+    const bar = this.querySelector("#mi-bar");
+    bar.progress = pct;
+    bar.setAttribute("aria-valuenow", String(pct));
     this.querySelector("#mi-status").textContent = this.#running
       ? `${j.done} of ${j.total}${j.current ? `, ${j.current}` : ""}`
       : `${j.state}: ${j.done} of ${j.total}`;
@@ -513,8 +530,8 @@ class MediumImportDashboard extends Base {
 
   #renderBanner() {
     this.querySelector("#mi-banner").innerHTML =
-      (this.#error ? `<div class="mi-err" role="alert">${esc(this.#error)}</div>` : "")
-      + (this.#notice ? `<div class="mi-warn">${esc(this.#notice)}</div>` : "")
+      (this.#error ? `<div class="mi-msg mi-msg--danger" role="alert">${esc(this.#error)}</div>` : "")
+      + (this.#notice ? `<div class="mi-msg mi-msg--warning" role="status">${esc(this.#notice)}</div>` : "")
       + (this.#info ? `<div class="mi-msg">${esc(this.#info)}</div>` : "")
       + (this.#busy ? `<div class="mi-msg">Reading the export...</div>` : "");
   }
@@ -533,12 +550,12 @@ class MediumImportDashboard extends Base {
       + (withFailures ? `, ${withFailures} with failures` : "");
     const body = groups.filter(([, list]) => list.length).map(([name, list]) => `
       <h4>${name}</h4>
-      <table class="mi-table"><tbody>${list.map((s) => `
-        <tr><td>${s.contentKey ? `<a href="/umbraco/section/content/workspace/document/edit/${esc(s.contentKey)}" target="_blank" rel="noopener">${esc(s.title)}</a>` : esc(s.title)}</td>
-        <td>${esc(s.reason ?? "")}${failuresOf(s).map((f) => `<div class="mi-err">${esc(f)}</div>`).join("")}${(s.warnings ?? []).map((w) => `<div class="mi-note">${esc(w)}</div>`).join("")}</td></tr>`).join("")}
-      </tbody></table>`).join("");
-    const warnings = (r.warnings ?? []).map((w) => `<div class="mi-warn">${esc(w)}</div>`).join("");
-    host.innerHTML = `<div class="mi-box"><h3>Result</h3><div class="mi-note">${esc(counts)}</div>${warnings}${body}</div>`;
+      <div class="mi-scroll"><uui-table>${list.map((s) => `
+        <uui-table-row><uui-table-cell>${s.contentKey ? `<a href="/umbraco/section/content/workspace/document/edit/${esc(s.contentKey)}" target="_blank" rel="noopener">${esc(s.title)}</a>` : esc(s.title)}</uui-table-cell>
+        <uui-table-cell>${esc(s.reason ?? "")}${failuresOf(s).map((f) => `<div class="mi-fail">${esc(f)}</div>`).join("")}${(s.warnings ?? []).map((w) => `<div class="mi-note">${esc(w)}</div>`).join("")}</uui-table-cell></uui-table-row>`).join("")}
+      </uui-table></div>`).join("");
+    const warnings = (r.warnings ?? []).map((w) => `<div class="mi-msg mi-msg--warning">${esc(w)}</div>`).join("");
+    host.innerHTML = `<uui-box headline="Result"><div class="mi-note">${esc(counts)}</div>${warnings}${body}</uui-box>`;
   }
 }
 
