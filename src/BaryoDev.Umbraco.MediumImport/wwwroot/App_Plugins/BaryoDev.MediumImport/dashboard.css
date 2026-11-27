@@ -27,5 +27,6 @@
 #mi-progress { display: grid; gap: var(--uui-size-space-2); margin-top: var(--uui-size-space-4); }
 .mi-scroll { overflow-x: auto; }
 .mi-off { color: var(--uui-color-text-alt); }
+.mi uui-tag { white-space: nowrap; }
 .mi-result h4 { margin: var(--uui-size-space-5) 0 var(--uui-size-space-2); font-size: var(--uui-type-default-size); }
 .mi-result .mi-msg { margin-top: var(--uui-size-space-3); }
