@@ -4,7 +4,7 @@
 .mi-head { display: flex; align-items: center; gap: var(--uui-size-space-5); }
 .mi-head svg { height: 28px; display: block; }
 .mi-title { margin: 0; font-size: var(--uui-type-h4-size); }
-.mi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: var(--uui-size-space-5); align-items: start; }
+.mi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr)); gap: var(--uui-size-space-5); align-items: start; }
 .mi-col { display: grid; gap: var(--uui-size-space-5); min-width: 0; }
 .mi-row { display: grid; gap: var(--uui-size-space-1); margin-bottom: var(--uui-size-space-4); }
 .mi-row:last-child { margin-bottom: 0; }
